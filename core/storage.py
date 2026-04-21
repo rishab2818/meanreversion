@@ -1,32 +1,40 @@
-"""Persistence — trade journal + per-stock ML profiles."""
-import os, json
+"""Persistence â€” trade journal + per-stock ML profiles."""
+import json
+import os
+
 from core.config import JOURNAL_F, PROFILES_F
 
-def load_journal():
-    if os.path.exists(JOURNAL_F):
+
+def load_json_file(path, default):
+    if os.path.exists(path):
         try:
-            with open(JOURNAL_F, encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
-    return []
+    return default
+
+
+def save_json_file(path, payload):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+
+def load_journal():
+    return load_json_file(JOURNAL_F, [])
+
 
 def save_journal(t):
-    with open(JOURNAL_F, "w", encoding="utf-8") as f:
-        json.dump(t, f, indent=2)
+    save_json_file(JOURNAL_F, t)
+
 
 def load_profiles():
-    if os.path.exists(PROFILES_F):
-        try:
-            with open(PROFILES_F, encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    return load_json_file(PROFILES_F, {})
+
 
 def save_profiles(p):
-    with open(PROFILES_F, "w", encoding="utf-8") as f:
-        json.dump(p, f, indent=2)
+    save_json_file(PROFILES_F, p)
+
 
 def get_mr_params(ticker):
     """Returns tuned MR params for ticker, or None."""
@@ -34,8 +42,8 @@ def get_mr_params(ticker):
     prof = profiles.get(ticker, {})
     if "mr" in prof:
         return prof["mr"].get("params")
-    # legacy shape
     return prof.get("params")
+
 
 def get_dcf_params(ticker):
     profiles = load_profiles()
@@ -44,17 +52,10 @@ def get_dcf_params(ticker):
         return prof["dcf"].get("params")
     return None
 
+
 def calibration_factor():
-    """Calibration factor for Kelly sizing, based on CLOSED journal trades.
-
-    factor = realized_WR / predicted_WR, clamped to [0.3, 1.3].
-
-    <1.0 → model is overconfident; shrink size.
-    >1.0 → model is conservative; allow slightly larger size.
-    With <5 closed trades we return 1.0 (insufficient data — don't bias yet).
-    """
+    """Calibration factor for Kelly sizing, based on CLOSED journal trades."""
     trades = [t for t in load_journal() if t.get("status") == "closed"]
-    # Need enough trades with a recorded predicted win rate to calibrate
     calib_trades = [t for t in trades if t.get("predictedWR") is not None]
     if len(calib_trades) < 5:
         return {"factor": 1.0, "n": len(calib_trades), "predWR": None, "realWR": None}
@@ -65,5 +66,9 @@ def calibration_factor():
         f = 1.0
     else:
         f = max(0.3, min(1.3, real / pred))
-    return {"factor": round(f, 3), "n": len(calib_trades),
-            "predWR": round(pred, 1), "realWR": round(real, 1)}
+    return {
+        "factor": round(f, 3),
+        "n": len(calib_trades),
+        "predWR": round(pred, 1),
+        "realWR": round(real, 1),
+    }

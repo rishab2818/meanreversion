@@ -8,6 +8,7 @@ FUND_TTL   = 60 * 60 * 6  # 6h for fundamentals (slower-moving)
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JOURNAL_F  = os.path.join(BASE_DIR, "journal.json")
 PROFILES_F = os.path.join(BASE_DIR, "stock_profiles.json")
+SCAN_HISTORY_F = os.path.join(BASE_DIR, "scan_history.json")
 
 # CAPM / WACC assumptions (override per-ticker via DCF params)
 RISK_FREE         = 0.0425   # 10Y Treasury approx
@@ -73,6 +74,19 @@ TOP50_VOL = [
 ]
 
 YOUR_STOCKS = ["LITE","WOLF","MVST","SMCI","META","GFS","AAOI","NVDA","AMD","TSLA"]
+
+INDIA_LARGECAP = [
+    "RELIANCE.NS","TCS.NS","HDFCBANK.NS","ICICIBANK.NS","BHARTIARTL.NS","INFY.NS",
+    "ITC.NS","SBIN.NS","LT.NS","HINDUNILVR.NS","AXISBANK.NS","KOTAKBANK.NS",
+    "BAJFINANCE.NS","SUNPHARMA.NS","NTPC.NS","MARUTI.NS","M&M.NS","ULTRACEMCO.NS",
+    "TITAN.NS","POWERGRID.NS","ASIANPAINT.NS","HCLTECH.NS","TATAMOTORS.NS","WIPRO.NS",
+    "NESTLEIND.NS","ADANIPORTS.NS","TATASTEEL.NS","JSWSTEEL.NS","HINDALCO.NS","COALINDIA.NS",
+    "TECHM.NS","CIPLA.NS","BAJAJFINSV.NS","GRASIM.NS","INDUSINDBK.NS","BEL.NS",
+    "TRENT.NS","EICHERMOT.NS","HEROMOTOCO.NS","DRREDDY.NS","APOLLOHOSP.NS","DIVISLAB.NS",
+    "ADANIENT.NS","ONGC.NS","BPCL.NS","TATACONSUM.NS","BRITANNIA.NS","SHRIRAMFIN.NS",
+    "HDFCLIFE.NS","SBILIFE.NS",
+]
+INDIA_LARGECAP = list(dict.fromkeys(INDIA_LARGECAP))
 
 SECTOR_MAP = {
     "XLK":["AAPL","MSFT","NVDA","AVGO","AMD","ORCL","CSCO","IBM","INTC","QCOM","ADBE","CRM","INTU","TXN","ACN","LRCX","ADI","KEYS","ANSS","CDNS"],

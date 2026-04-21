@@ -5,3 +5,4 @@ __pycache__/
 
 journal.json
 stock_profiles.json
+scan_history.json

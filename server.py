@@ -8,13 +8,16 @@ Thin HTTP shell — all engines live in the `core/` package.
 import http.server, socketserver, json, urllib.parse, os, sys, time, threading
 from datetime import datetime
 
-from core.config    import PORT, BASE_DIR, log, SP500, TOP50_VOL, YOUR_STOCKS, get_sector_etf
+from core.config    import PORT, BASE_DIR, log, SP500, TOP50_VOL, YOUR_STOCKS, INDIA_LARGECAP, get_sector_etf
 from core.data      import (fetch_ticker, fetch_fundamentals, fetch_quote_meta,
                             fetch_iv_premium, CACHE)
 from core.mr_engine import analyze
 from core.dcf_engine import analyze_dcf, dcf_backtest
 from core.monte_carlo import monte_carlo
-from core.correlation import build_correlation, spread_signals
+from core.correlation import build_correlation, pair_workspace, spread_signals
+from core.history import load_scan_history, get_scan_snapshot, record_scan_snapshot
+from core.ranking import rank_scan_results
+from core.regime import market_regime_dashboard
 from core.ml_optimizer import ga_state, run_ga_mr, run_ga_dcf
 from core.storage import (load_journal, save_journal,
                           load_profiles, save_profiles,
@@ -73,6 +76,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             include_meta = qs.get("meta", ["1"])[0] in ("1", "true", "yes")
             include_iv  = qs.get("iv",   ["0"])[0] in ("1", "true", "yes")
             include_sector = qs.get("sector", ["1"])[0] in ("1", "true", "yes")
+            watchlist = qs.get("watchlist", ["custom"])[0]
+            market = qs.get("market", ["india" if any(t.endswith(".NS") for t in tickers) else "us"])[0]
             calib = calibration_factor()
             results = []
             for tk in tickers:
@@ -122,7 +127,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     else:
                         a["dcf"] = {"ok": False, "sig": "unknown"}
                 results.append(a)
-            self.send_json({"ok": True, "results": results, "n": len(tickers), "got": len(results)})
+            ranked = rank_scan_results(results)
+            snapshot = record_scan_snapshot(ranked, {
+                "watchlist": watchlist,
+                "market": market,
+                "tickerCount": len(tickers),
+                "scanMode": "mr",
+            })
+            self.send_json({
+                "ok": True,
+                "results": ranked,
+                "n": len(tickers),
+                "got": len(ranked),
+                "historyId": (snapshot or {}).get("id"),
+            })
             return
 
         if path == "/api/dcf":
@@ -165,9 +183,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             tickers = [t.strip().upper() for t in qs.get("tickers", [""])[0].split(",") if t.strip()]
             if not tickers:
                 tickers = list(CACHE.keys())
+            for tk in tickers:
+                if tk not in CACHE:
+                    fetch_ticker(tk)
             matrix, pairs = build_correlation(tickers)
             spreads = spread_signals(pairs)
             self.send_json({"ok": True, "matrix": matrix, "pairs": pairs, "spreads": spreads})
+            return
+
+        if path == "/api/pair_detail":
+            t1 = qs.get("t1", [""])[0].strip().upper()
+            t2 = qs.get("t2", [""])[0].strip().upper()
+            if not t1 or not t2:
+                self.send_json({"ok": False, "error": "t1 and t2 required"}, 400); return
+            fetch_ticker(t1); fetch_ticker(t2)
+            detail = pair_workspace(t1, t2)
+            if not detail:
+                self.send_json({"ok": False, "error": "insufficient pair data"}); return
+            self.send_json({"ok": True, "pair": detail})
             return
 
         if path == "/api/monte_carlo":
@@ -180,7 +213,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
 
         if path == "/api/watchlists":
-            self.send_json({"sp500": SP500, "top50vol": TOP50_VOL, "yours": YOUR_STOCKS})
+            self.send_json({"sp500": SP500, "top50vol": TOP50_VOL, "yours": YOUR_STOCKS, "india": INDIA_LARGECAP})
             return
 
         if path == "/api/ga_status":
@@ -193,6 +226,32 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/profiles":
             self.send_json({"ok": True, "profiles": load_profiles()})
+            return
+
+        if path == "/api/scan_history":
+            history = load_scan_history()
+            slim = [{
+                "id": snap.get("id"),
+                "createdAt": snap.get("createdAt"),
+                "meta": snap.get("meta"),
+                "summary": snap.get("summary"),
+            } for snap in reversed(history)]
+            self.send_json({"ok": True, "history": slim})
+            return
+
+        if path == "/api/scan_history_detail":
+            snapshot_id = qs.get("id", [""])[0].strip()
+            if not snapshot_id:
+                self.send_json({"ok": False, "error": "id required"}, 400); return
+            snap = get_scan_snapshot(snapshot_id)
+            if not snap:
+                self.send_json({"ok": False, "error": "snapshot not found"}, 404); return
+            self.send_json({"ok": True, "snapshot": snap})
+            return
+
+        if path == "/api/regime":
+            market = qs.get("market", ["us"])[0].strip().lower() or "us"
+            self.send_json({"ok": True, "dashboard": market_regime_dashboard(market)})
             return
 
         self.send_json({"error": "not found"}, 404)

@@ -167,13 +167,26 @@ input[type=range]{accent-color:var(--gr);flex:1}
 /* CORRELATION PANE */
 .corr-body{padding:16px;display:flex;flex-direction:column;gap:12px}
 .spread-cards{display:flex;flex-wrap:wrap;gap:8px}
-.spread-card{background:var(--bg2);border:1px solid var(--bdr2);border-radius:8px;padding:12px 14px;min-width:240px;max-width:340px}
+.spread-card{background:var(--bg2);border:1px solid var(--bdr2);border-radius:8px;padding:12px 14px;min-width:240px;max-width:340px;cursor:pointer}
 .spread-tk{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--tx);margin-bottom:4px}
 .spread-z{font-family:var(--mono);font-size:18px;font-weight:600;margin-bottom:2px}
 .spread-dir{font-size:11px;color:var(--gr);margin-bottom:4px}
 .spread-plain{font-size:11px;color:var(--tx2);line-height:1.5}
 .corr-matrix table{width:auto}
 .corr-cell{font-family:var(--mono);font-size:10px;font-weight:600;padding:5px 8px;text-align:center;min-width:48px}
+.pair-workspace,.history-card,.reg-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:14px}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+.hist-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}
+.history-card{cursor:pointer}
+.history-card.on{border-color:var(--gr)}
+.hc-top{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px}
+.hc-time{font-family:var(--mono);font-size:11px;color:var(--tx2)}
+.hc-meta{font-size:11px;color:var(--tx3);line-height:1.6}
+.reg-card h4{font-size:12px;margin-bottom:6px;color:var(--tx)}
+.reg-v{font-family:var(--mono);font-size:18px;font-weight:600}
+.reg-s{font-size:11px;color:var(--tx2);line-height:1.6}
+.mini-note{font-size:11px;color:var(--tx3);line-height:1.7}
+.chart-wrap{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:12px;height:220px}
 
 /* JOURNAL PANE */
 .j-body{padding:16px;display:flex;flex-direction:column;gap:12px}
@@ -200,12 +213,14 @@ input[type=number]:focus{border-color:var(--gr)}
 <div id="app">
 <div id="bar">
   <div class="logo">MR SCANNER v5</div>
-  <button class="tab on" onclick="go('scanner',this)">Scanner</button>
-  <button class="tab" onclick="go('dcf',this)">Value (DCF)</button>
-  <button class="tab" onclick="go('ml',this)">ML Optimizer</button>
-  <button class="tab" onclick="go('montecarlo',this)">Risk Simulator</button>
-  <button class="tab" onclick="go('correlation',this)">Pairs</button>
-  <button class="tab" onclick="go('journal',this)">Journal</button>
+  <button class="tab on" data-tab="scanner" onclick="go('scanner',this)">Scanner</button>
+  <button class="tab" data-tab="history" onclick="go('history',this)">History</button>
+  <button class="tab" data-tab="regime" onclick="go('regime',this)">Regime</button>
+  <button class="tab" data-tab="dcf" onclick="go('dcf',this)">Value (DCF)</button>
+  <button class="tab" data-tab="ml" onclick="go('ml',this)">ML Optimizer</button>
+  <button class="tab" data-tab="montecarlo" onclick="go('montecarlo',this)">Risk Simulator</button>
+  <button class="tab" data-tab="correlation" onclick="go('correlation',this)">Pairs</button>
+  <button class="tab" data-tab="journal" onclick="go('journal',this)">Journal</button>
   <div class="bar-r">
     <span class="live" id="ls">● Ready</span>
     <span class="ts" id="ts">localhost:7432</span>
@@ -219,6 +234,7 @@ input[type=number]:focus{border-color:var(--gr)}
     <div class="fg"><div class="fl">Watchlist</div>
       <select id="wl-sel">
         <option value="yours">Your Stocks</option>
+        <option value="india">India Large Caps</option>
         <option value="top50vol">Top 50 Volume</option>
         <option value="sp500">Full S&P 500 (slow)</option>
         <option value="custom">Custom</option>
@@ -304,6 +320,7 @@ input[type=number]:focus{border-color:var(--gr)}
           <option value="scanner">Use Scanner tickers</option>
           <option value="dcf">Use DCF tab tickers</option>
           <option value="yours">Your Stocks</option>
+          <option value="india">India Large Caps</option>
           <option value="top50vol">Top 50 Volume</option>
         </select>
       </div>
@@ -351,6 +368,7 @@ input[type=number]:focus{border-color:var(--gr)}
     <div class="fg"><div class="fl">Watchlist</div>
       <select id="dcf-wl-sel">
         <option value="yours">Your Stocks</option>
+        <option value="india">India Large Caps</option>
         <option value="top50vol">Top 50 Volume</option>
         <option value="sp500">Full S&P 500 (slow)</option>
         <option value="custom">Custom</option>
@@ -473,6 +491,31 @@ input[type=number]:focus{border-color:var(--gr)}
 </div>
 
 <!-- ══════════════ JOURNAL ══════════════ -->
+<div class="pane" id="p-history">
+  <div class="strip">
+    <div style="font-size:12px;color:var(--tx2)">Every scan snapshot is ranked and archived automatically, so you can compare what the engine liked across time instead of just looking at the latest run.</div>
+    <button class="btn btn-blue" onclick="loadScanHistory()">Refresh History</button>
+  </div>
+  <div class="scroll corr-body" id="history-body">
+    <div class="empty"><div class="empty-icon">â—Ž</div><div class="empty-t">No scan history yet</div><div class="empty-s">Run a scan and the app will archive the ranked results here.</div></div>
+  </div>
+</div>
+
+<div class="pane" id="p-regime">
+  <div class="strip">
+    <div class="fg"><div class="fl">Market</div>
+      <select id="regime-market">
+        <option value="us">United States</option>
+        <option value="india">India</option>
+      </select>
+    </div>
+    <button class="btn btn-blue" onclick="loadRegime()">Refresh Dashboard</button>
+  </div>
+  <div class="scroll corr-body" id="regime-body">
+    <div class="empty"><div class="empty-icon">â—Ž</div><div class="empty-t">Load the market dashboard</div><div class="empty-s">This view measures trend, breadth, volatility, and mean-reversion friendliness for the current market.</div></div>
+  </div>
+</div>
+
 <div class="pane" id="p-journal">
   <div class="scroll">
   <div class="j-body">
@@ -506,11 +549,12 @@ input[type=number]:focus{border-color:var(--gr)}
 <script>
 'use strict';
 // ── state ────────────────────────────────────────────────────────────────────
-var allR=[], sortS={col:'winRate',dir:-1}, actF='all';
+var allR=[], sortS={col:'rankScore',dir:-1}, actF='all';
 var dcfR=[], dcfSortS={col:'mosMed',dir:-1};
-var mcChart=null, gaTimer=null, gaPolling=false, bestChr=null;
+var mcChart=null, gaTimer=null, gaPolling=false, bestChr=null, pairChart=null;
 var mlMode='mr';
-var wlData={yours:[],top50vol:[],sp500:[]};
+var wlData={yours:[],india:[],top50vol:[],sp500:[]};
+var scanHistory=[], activeHistoryId=null;
 
 // ── boot ─────────────────────────────────────────────────────────────────────
 (function init(){
@@ -533,6 +577,8 @@ function go(name,btn){
   document.getElementById('p-'+name).classList.add('on');
   btn.classList.add('on');
   if(name==='journal') loadJournal();
+  if(name==='history') loadScanHistory();
+  if(name==='regime') loadRegime();
   if(name==='montecarlo') setTimeout(runMC,100);
 }
 
@@ -541,6 +587,12 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 function sp(n,d){ return n!=null?parseFloat(n).toFixed(d!=null?d:2):'—'; }
 function showBnr(msg,type){ var b=document.getElementById('bnr'); b.textContent=msg; b.className='bnr show '+type; }
 function cx(cond,a,b){ return cond?a:(b||''); }
+function selectedMarket(){
+  var wl=document.getElementById('wl-sel').value;
+  if(wl==='india') return 'india';
+  var custom=document.getElementById('custom-in').value||'';
+  return custom.indexOf('.NS')>=0 ? 'india' : 'us';
+}
 
 // ── get tickers ────────────────────────────────────────────────────────────────
 function getTickers(){
@@ -552,6 +604,8 @@ function getTickers(){
 // ── SCANNER ───────────────────────────────────────────────────────────────────
 async function startScan(){
   var tickers=getTickers();
+  var watchlist=document.getElementById('wl-sel').value;
+  var market=selectedMarket();
   if(!tickers.length){showBnr('No tickers selected. Choose a watchlist first.','warn');return;}
   document.getElementById('scan-btn').disabled=true;
   document.getElementById('scan-btn').textContent='Scanning...';
@@ -573,7 +627,7 @@ async function startScan(){
     document.getElementById('pl').textContent='Fetching live prices...';
     try{
       var dcfOn=document.getElementById('scan-dcf').value;
-      var url='/api/scan?tickers='+batch.join(',')+'&rsiP=14&bbStd=2.0&zWin=20&volMin=1.0&dcf='+dcfOn;
+      var url='/api/scan?tickers='+batch.join(',')+'&rsiP=14&bbStd=2.0&zWin=20&volMin=1.0&dcf='+dcfOn+'&watchlist='+watchlist+'&market='+market;
       var resp=await fetch(url);
       var d=await resp.json();
       if(d.results) allR=allR.concat(d.results);
@@ -592,7 +646,7 @@ async function startScan(){
     showBnr('No results. Make sure server.py is running: python server.py','err');
     return;
   }
-  updateStats(); renderTable();
+  updateStats(); renderTable(); loadScanHistory();
   document.getElementById('stats').style.display='flex';
   document.getElementById('filters').style.display='flex';
 }
@@ -600,12 +654,12 @@ async function startScan(){
 function updateStats(){
   var buys=allR.filter(function(r){return r.sig==='strong-buy'||r.sig==='buy';});
   var sells=allR.filter(function(r){return r.sig==='strong-sell'||r.sig==='sell';});
-  var bwr=allR.reduce(function(a,b){return b.winRate>(a?a.winRate:0)?b:a;},null);
+  var bwr=allR.reduce(function(a,b){return (b.rankScore||0)>(a?(a.rankScore||0):0)?b:a;},null);
   var ash=allR.length?(allR.reduce(function(a,b){return a+(b.sharpe||0);},0)/allR.length).toFixed(2):'—';
   document.getElementById('st-n').textContent=allR.length;
   document.getElementById('st-buy').textContent=buys.length;
   document.getElementById('st-sell').textContent=sells.length;
-  document.getElementById('st-bwr').textContent=bwr&&bwr.winRate?bwr.winRate+'%':'—';
+  document.getElementById('st-bwr').textContent=bwr&&bwr.rankScore?sp(bwr.rankScore,1):'—';
   document.getElementById('st-bp').textContent=bwr?bwr.ticker:'—';
   document.getElementById('st-sh').textContent=ash;
 }
@@ -657,7 +711,7 @@ function renderTable(){
     return;
   }
   var cols=[
-    {k:'ticker',l:'Stock'},{k:'sig',l:'Signal'},{k:'cur',l:'Price'},
+    {k:'rankScore',l:'Rank'},{k:'ticker',l:'Stock'},{k:'sig',l:'Signal'},{k:'cur',l:'Price'},
     {k:'winRate',l:'Win% (OOS)'},{k:'regimeWR',l:'Regime WR%'},
     {k:'avgRet',l:'Avg Return'},{k:'sharpe',l:'Sharpe'},
     {k:'halfLife',l:'Snaps back in'},{k:'regime',l:'Market state'},
@@ -685,6 +739,7 @@ function renderTable(){
     var prc=r.cur>(r.ma20||0)?'color:var(--gr)':'color:var(--rd)';
     var shc=(r.sharpe||0)>=1?'color:var(--gr)':(r.sharpe||0)>=0.5?'color:var(--am)':'color:var(--rd)';
     h+='<tr onclick="showDetail(\''+r.ticker+'\')">';
+    h+='<td><span style="color:var(--am);font-weight:600">#'+(r.rank||'—')+'</span><div style="font-size:10px;color:var(--tx3)">'+sp(r.rankScore,1)+'</div></td>';
     h+='<td><strong style="font-size:12px">'+esc(r.ticker)+'</strong><div style="font-size:10px;color:var(--tx3)">'+esc(r.name)+'</div></td>';
     h+='<td>'+sigBadge(r.sig)+'</td>';
     h+='<td style="'+prc+'">$'+sp(r.cur)+'</td>';
@@ -931,7 +986,7 @@ function prefillJournal(tk,dir,en,st,tg,wp){
   document.getElementById('jt-st').value=st;
   document.getElementById('jt-tg').value=tg;
   document.getElementById('jt-wp').value=wp;
-  go('journal',document.querySelectorAll('.tab')[4]);
+  go('journal',document.querySelector('.tab[data-tab="journal"]'));
 }
 
 function clearAll(){
@@ -1334,11 +1389,11 @@ function renderTop10(top10){
 
 function applyParams(p){
   if(p.gNear!=null){
-    go('dcf',document.querySelectorAll('.tab')[1]);
+    go('dcf',document.querySelector('.tab[data-tab="dcf"]'));
     var b=document.getElementById('dcf-tw');
     b.insertAdjacentHTML('afterbegin','<div class="bnr info show" style="margin:8px 0">DCF priors tuned: g_near='+sp(p.gNear*100,1)+'% WACC='+sp(p.wacc*100,1)+'% MoS threshold='+p.marginThreshold+'%. Profile saved — future Value Scans will use it automatically.</div>');
   } else {
-    go('scanner',document.querySelectorAll('.tab')[0]);
+    go('scanner',document.querySelector('.tab[data-tab="scanner"]'));
     showBnr('ML settings applied (RSI='+p.rsiP+', BB='+p.bbStd+', Z='+p.zWin+'). Press Scan to use them.','ok');
   }
 }
@@ -1441,7 +1496,7 @@ function renderCorr(matrix,pairs,spreads){
     spreads.forEach(function(s){
       var zc=Math.abs(s.z)>2?'var(--gr)':'var(--am)';
       var wc=s.winRate>=65?'var(--gr)':s.winRate>=55?'var(--am)':'var(--rd)';
-      h+='<div class="spread-card">';
+      h+='<div class="spread-card" onclick="loadPairDetail(\''+s.t1+'\',\''+s.t2+'\')">';
       h+='<div class="spread-tk">'+esc(s.t1)+' vs '+esc(s.t2)+' <span style="font-size:10px;color:var(--gr);margin-left:4px">● Cointegrated</span></div>';
       h+='<div class="spread-z" style="color:'+zc+'">'+s.z+'σ from normal</div>';
       h+='<div class="spread-dir">'+esc(s.direction)+'</div>';
@@ -1464,7 +1519,7 @@ function renderCorr(matrix,pairs,spreads){
       var fc=danger?'var(--rd)':'var(--am)';
       var note=danger?'⚠ Almost identical movement — holding both is the same bet twice':'They move similarly — consider sizing down if holding both';
       var cointTag=p.cointegrated?' <span style="color:var(--gr);font-size:10px;margin-left:4px">● Cointegrated (tradable as pair)</span>':' <span style="color:var(--tx3);font-size:10px;margin-left:4px">— not cointegrated (drift risk)</span>';
-      h+='<div style="background:'+bg+';border:1px solid '+bc+';border-radius:8px;padding:8px 12px;font-size:12px">';
+      h+='<div onclick="loadPairDetail(\''+p.t1+'\',\''+p.t2+'\')" style="background:'+bg+';border:1px solid '+bc+';border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer">';
       h+='<span style="color:'+fc+';font-weight:600">'+esc(p.t1)+' and '+esc(p.t2)+'</span>';
       h+='<span style="color:var(--tx2);margin-left:6px">r='+p.corr+'</span>'+cointTag;
       h+='<div style="font-size:11px;color:var(--tx3);margin-top:3px">'+note+(p.cointAdf!=null?' · ADF='+p.cointAdf:'')+'</div>';
@@ -1490,10 +1545,137 @@ function renderCorr(matrix,pairs,spreads){
     });
     h+='</tbody></table></div>';
   }
+  h+='<div id="pair-workspace"></div>';
   document.getElementById('corr-body').innerHTML=h||'<div class="empty"><div class="empty-icon">◉</div><div class="empty-t">No data</div></div>';
+  if(spreads&&spreads.length) loadPairDetail(spreads[0].t1,spreads[0].t2);
 }
 
 // ── JOURNAL ────────────────────────────────────────────────────────────────────
+async function loadPairDetail(t1,t2){
+  try{
+    var d=await(await fetch('/api/pair_detail?t1='+t1+'&t2='+t2)).json();
+    if(!d.ok) return;
+    renderPairWorkspace(d.pair);
+  }catch(e){}
+}
+
+function renderPairWorkspace(pair){
+  var el=document.getElementById('pair-workspace');
+  if(!el||!pair) return;
+  var bt=pair.backtest||{};
+  var plan=pair.plan||{};
+  var tradeRows=(bt.history||[]).map(function(tr){
+    return '<tr><td>'+tr.entryZ+'</td><td>'+tr.exitZ+'</td><td>'+(tr.direction>0?'Long spread':'Short spread')+'</td><td>'+tr.barsHeld+'d</td><td style="color:'+(tr.ret>=0?'var(--gr)':'var(--rd)')+'">'+(tr.ret>=0?'+':'')+sp(tr.ret,2)+'%</td><td>'+esc(tr.reason)+'</td></tr>';
+  }).join('');
+  var h='<div class="pair-workspace" style="margin-top:14px">';
+  h+='<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px">';
+  h+='<div><div style="font-size:14px;font-weight:600;color:var(--tx)">'+esc(pair.t1)+' / '+esc(pair.t2)+'</div><div class="mini-note">Hedge ratio '+sp(pair.cointBeta,3)+' · Corr '+sp(pair.corr,2)+' · ADF '+sp(pair.cointAdf,2)+' · Half-life '+(pair.halfLife?pair.halfLife+'d':'—')+'</div></div>';
+  h+='<div class="sbdg '+(pair.cointegrated?'sb':'nn')+'">'+(pair.cointegrated?'Cointegrated':'Not cointegrated')+'</div>';
+  h+='</div>';
+  h+='<div class="card-grid" style="margin-bottom:12px">';
+  h+='<div class="reg-card"><h4>Trade Plan</h4><div class="reg-v" style="color:'+(Math.abs(plan.latestZ)>=1.8?'var(--gr)':'var(--am)')+'">'+esc(plan.action||'Wait')+'</div><div class="reg-s">Enter beyond |z| '+plan.entryZ+', take profits near '+plan.exitZ+', stop past '+plan.stopZ+'.</div></div>';
+  h+='<div class="reg-card"><h4>Current Stretch</h4><div class="reg-v">'+(pair.latestZ>0?'+':'')+sp(pair.latestZ,2)+'σ</div><div class="reg-s">Positive z means '+esc(pair.t1)+' is rich vs '+esc(pair.t2)+'; negative means cheap.</div></div>';
+  h+='<div class="reg-card"><h4>Backtest Win Rate</h4><div class="reg-v" style="color:'+(bt.winRate>=60?'var(--gr)':bt.winRate>=50?'var(--am)':'var(--rd)')+'">'+sp(bt.winRate,1)+'%</div><div class="reg-s">'+(bt.trades||0)+' spread trades with average hold '+sp(bt.avgHold,1)+' bars.</div></div>';
+  h+='<div class="reg-card"><h4>Spread Return</h4><div class="reg-v" style="color:'+(bt.avgReturn>=0?'var(--gr)':'var(--rd)')+'">'+(bt.avgReturn>=0?'+':'')+sp(bt.avgReturn,2)+'%</div><div class="reg-s">Sharpe '+sp(bt.sharpe,2)+' · PF '+sp(bt.pf,2)+' · Max DD '+sp(bt.maxDD,2)+'%</div></div>';
+  h+='</div>';
+  h+='<div class="chart-wrap"><canvas id="pair-chart"></canvas></div>';
+  h+='<div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Entry Z</th><th>Exit Z</th><th>Direction</th><th>Hold</th><th>Return</th><th>Exit</th></tr></thead><tbody>'+(tradeRows||'<tr><td colspan="6" style="color:var(--tx3)">No historical spread trades yet.</td></tr>')+'</tbody></table></div>';
+  h+='</div>';
+  el.innerHTML=h;
+  setTimeout(function(){ renderPairChart(pair.series||{}); },0);
+}
+
+function renderPairChart(series){
+  var cv=document.getElementById('pair-chart');
+  if(!cv) return;
+  if(pairChart){pairChart.destroy();pairChart=null;}
+  pairChart=new Chart(cv,{
+    type:'line',
+    data:{labels:series.dates||[],datasets:[
+      {label:'Z-score',data:(series.z||[]).map(function(v){return v==null?null:parseFloat(v);}),borderColor:'rgba(0,232,150,.9)',backgroundColor:'rgba(0,232,150,.08)',pointRadius:0,tension:.25,yAxisID:'y'},
+      {label:'Spread',data:(series.spread||[]).map(function(v){return parseFloat(v);}),borderColor:'rgba(77,176,255,.75)',pointRadius:0,tension:.2,yAxisID:'y1'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},
+      plugins:{legend:{labels:{color:'#527894',boxWidth:10}}},
+      scales:{x:{display:false},y:{grid:{color:'rgba(26,37,53,.6)'},ticks:{color:'#527894',font:{size:9}}},y1:{position:'right',grid:{display:false},ticks:{color:'#527894',font:{size:9}}}}}
+  });
+}
+
+async function loadScanHistory(){
+  try{
+    var d=await(await fetch('/api/scan_history')).json();
+    scanHistory=d.history||[];
+    renderHistory();
+  }catch(e){}
+}
+
+function renderHistory(){
+  var el=document.getElementById('history-body');
+  if(!el) return;
+  if(!scanHistory.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">◉</div><div class="empty-t">No scan history yet</div><div class="empty-s">Run a scan and the app will archive the ranked results here.</div></div>';
+    return;
+  }
+  var cards='<div class="hist-list">'+scanHistory.map(function(s){
+    var sm=s.summary||{}, meta=s.meta||{};
+    return '<div class="history-card'+(activeHistoryId===s.id?' on':'')+'" onclick="loadSnapshotDetail(\''+s.id+'\')"><div class="hc-top"><strong>'+esc((meta.watchlist||'custom').toUpperCase())+'</strong><span class="hc-time">'+esc((s.createdAt||'').replace('T',' '))+'</span></div><div class="hc-meta">Scanned '+(sm.scanned||0)+' · Actionable '+(sm.actionable||0)+' · Best '+esc(sm.bestTicker||'—')+'<br>Market '+esc((meta.market||'us').toUpperCase())+' · Avg rank '+sp(sm.avgRankScore,1)+'</div></div>';
+  }).join('')+'</div><div id="history-detail" style="margin-top:12px"></div>';
+  el.innerHTML=cards;
+  if(!activeHistoryId && scanHistory[0]) activeHistoryId=scanHistory[0].id;
+  if(activeHistoryId) loadSnapshotDetail(activeHistoryId);
+}
+
+async function loadSnapshotDetail(id){
+  activeHistoryId=id;
+  document.querySelectorAll('.history-card').forEach(function(card){card.classList.remove('on');});
+  var cards=document.querySelectorAll('.history-card');
+  cards.forEach(function(card){
+    if(card.getAttribute('onclick')&&card.getAttribute('onclick').indexOf(id)>=0) card.classList.add('on');
+  });
+  try{
+    var d=await(await fetch('/api/scan_history_detail?id='+id)).json();
+    if(!d.ok) return;
+    var s=d.snapshot||{};
+    var rows=(s.results||[]).map(function(r){
+      var mos=r.dcf&&r.dcf.mosCons!=null?((r.dcf.mosCons>0?'+':'')+sp(r.dcf.mosCons,0)+'%'):'—';
+      return '<tr><td>#'+(r.rank||'—')+'</td><td><strong>'+esc(r.ticker)+'</strong><div style="font-size:10px;color:var(--tx3)">'+esc(r.name||'')+'</div></td><td>'+sigBadge(r.sig)+'</td><td>'+sp(r.rankScore,1)+'</td><td>'+sp(r.winRate,1)+'%</td><td>'+(r.avgRet>0?'+':'')+sp(r.avgRet,2)+'%</td><td>'+sp(r.sharpe,2)+'</td><td>'+mos+'</td></tr>';
+    }).join('');
+    document.getElementById('history-detail').innerHTML='<div class="history-card"><div class="hc-top"><strong>Snapshot Detail</strong><span class="hc-time">'+esc((s.createdAt||'').replace('T',' '))+'</span></div><div class="mini-note">Top-ranked names from this scan. History is stored as slim ranked snapshots so the app stays fast.</div><div style="overflow-x:auto;margin-top:10px"><table><thead><tr><th>Rank</th><th>Stock</th><th>Signal</th><th>Score</th><th>Win%</th><th>Avg Ret</th><th>Sharpe</th><th>DCF MoS</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  }catch(e){}
+}
+
+async function loadRegime(){
+  var market=document.getElementById('regime-market').value;
+  try{
+    var d=await(await fetch('/api/regime?market='+market)).json();
+    if(!d.ok) return;
+    renderRegime(d.dashboard||{});
+  }catch(e){}
+}
+
+function renderRegime(d){
+  var el=document.getElementById('regime-body');
+  if(!el) return;
+  var benchmarks=d.benchmarks||[];
+  var breadth=d.breadth||{};
+  var takeaway=d.takeaway||{};
+  var h='<div class="reg-card" style="margin-bottom:12px"><h4>Market Takeaway</h4><div class="reg-v" style="font-size:20px;color:'+(takeaway.stance==='trend'?'var(--gr)':takeaway.stance==='defensive'?'var(--am)':'var(--bl)')+'">'+esc(takeaway.headline||'No data')+'</div><div class="reg-s">This combines benchmark trend, breadth, drawdown, and dispersion into a practical trading stance.</div></div>';
+  h+='<div class="card-grid" style="margin-bottom:12px">';
+  h+='<div class="reg-card"><h4>MR Opportunity</h4><div class="reg-v" style="color:var(--pu)">'+sp(breadth.mrOpportunityScore,1)+'</div><div class="reg-s">Higher means a more washed-out and statistically attractive environment for mean reversion.</div></div>';
+  h+='<div class="reg-card"><h4>Above 20DMA</h4><div class="reg-v">'+sp(breadth.above20Pct,1)+'%</div><div class="reg-s">'+(breadth.sampled||0)+' names sampled.</div></div>';
+  h+='<div class="reg-card"><h4>Above 50DMA</h4><div class="reg-v">'+sp(breadth.above50Pct,1)+'%</div><div class="reg-s">Broad trend health across the universe.</div></div>';
+  h+='<div class="reg-card"><h4>20D Dispersion</h4><div class="reg-v">'+sp(breadth.dispersion20,2)+'%</div><div class="reg-s">Cross-sectional return dispersion; higher means more stock-specific opportunity.</div></div>';
+  h+='</div>';
+  if(benchmarks.length){
+    h+='<div class="card-grid">';
+    benchmarks.forEach(function(b){
+      h+='<div class="reg-card"><h4>'+esc(b.label||b.ticker)+'</h4><div class="reg-v" style="color:'+(b.ret20>=0?'var(--gr)':'var(--rd)')+'">'+(b.ret20>=0?'+':'')+sp(b.ret20,2)+'%</div><div class="reg-s">20D return · 60D '+(b.ret60>=0?'+':'')+sp(b.ret60,2)+'%<br>Vol '+sp(b.vol20,1)+'% · DD '+sp(b.drawdown63,1)+'%<br>'+esc((b.regime||'unknown').replace('_',' '))+'</div></div>';
+    });
+    h+='</div>';
+  }
+  el.innerHTML=h;
+}
+
 async function loadJournal(){
   try{
     var d=await(await fetch('/api/journal')).json();
