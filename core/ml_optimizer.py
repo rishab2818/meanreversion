@@ -60,7 +60,7 @@ def fitness_mr(bt, fw, fr):
     spread_pen = max(0, (bt.get("foldSpread", 0) - 30)) / 100
     return (fw/100)*ws + (fr/100)*rs + 0.12*sh + 0.08*pf - 0.08*dd - 0.15*spread_pen
 
-def run_ga_mr(closes_list, params, ticker="portfolio"):
+def run_ga_mr(price_series_list, params, ticker="portfolio"):
     global ga_state
     ga_state.update({"running": True, "log": [], "pct": 0, "best": None,
                      "top10": [], "history": [], "ticker": ticker, "mode": "mr"})
@@ -71,25 +71,39 @@ def run_ga_mr(closes_list, params, ticker="portfolio"):
     fw = params.get("fw", 50); fr = params.get("fr", 50)
 
     def eval_c(c):
-        tot_w = tot_r = tot_s = tot_p = tot_d = 0.0; n = 0
-        for closes in closes_list:
-            d = [{"c": v, "h": v*1.01, "l": v*0.99, "v": 1e6, "o": v, "date": "2020-01-01"} for v in closes]
-            bt = mr_backtest(d, c)
-            tot_w += bt["winRate"]; tot_r += bt["avgReturn"]; tot_s += bt.get("sharpe", 0)
-            tot_p += bt.get("pf", 1); tot_d += bt.get("maxDD", 0); n += 1
+        tot_w = tot_wr_raw = tot_r = tot_s = tot_p = tot_d = 0.0
+        tot_fold_wr = tot_fold_spread = 0.0
+        tot_trades = 0
+        n = 0
+        for series in price_series_list:
+            bt = mr_backtest(series, c)
+            weight = max(bt.get("trades", 0), 1)
+            tot_w += bt["winRate"] * weight
+            tot_wr_raw += bt.get("winRateRaw", bt["winRate"]) * weight
+            tot_r += bt["avgReturn"] * weight
+            tot_s += bt.get("sharpe", 0) * weight
+            tot_p += bt.get("pf", 1) * weight
+            tot_d += bt.get("maxDD", 0) * weight
+            tot_fold_wr += bt.get("medianFoldWR", bt["winRate"]) * weight
+            tot_fold_spread += bt.get("foldSpread", 0) * weight
+            tot_trades += bt.get("trades", 0)
+            n += weight
         if n == 0:
             return {"winRate":50,"avgReturn":0,"sharpe":0,"pf":1,"maxDD":0,"trades":0}, -999
         bt2 = {"winRate":   round(tot_w/n, 1),
+               "winRateRaw": round(tot_wr_raw/n, 1),
                "avgReturn": round(tot_r/n, 3),
                "sharpe":    round(tot_s/n, 2),
                "pf":        round(tot_p/n, 2),
                "maxDD":     round(tot_d/n, 1),
-               "trades":    n*10}
+               "trades":    int(tot_trades),
+               "medianFoldWR": round(tot_fold_wr/n, 1),
+               "foldSpread": round(tot_fold_spread/n, 1)}
         return bt2, fitness_mr(bt2, fw, fr)
 
     pop = [rnd_mr() for _ in range(pop_size)]
     best_ever = None; best_fit = -999
-    _addlog(f"MR OPTIMIZER | Stocks: {len(closes_list)} | Pop: {pop_size} | Gens: {n_gen}")
+    _addlog(f"MR OPTIMIZER | Stocks: {len(price_series_list)} | Pop: {pop_size} | Gens: {n_gen}")
     _addlog("Using walk-forward backtesting — honest numbers only")
     _addlog("─"*48)
 

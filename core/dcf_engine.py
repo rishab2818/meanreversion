@@ -84,7 +84,7 @@ def wacc(fund, cost_debt=DEFAULT_COST_DEBT, tax=CORP_TAX,
     # equity weight
     mc = fund.get("marketCap") if fund else None
     td = fund.get("totalDebt") if fund else None
-    if mc and td and (mc + td) > 0:
+    if mc is not None and td is not None and (mc + td) > 0:
         we = mc / (mc + td)
         wd = td / (mc + td)
     else:
@@ -196,17 +196,23 @@ def monte_carlo_dcf(fund, params=None, n_sims=4000):
     }
 
 # ─── reverse DCF (implied growth) ──────────────────────────────────────────────
-def reverse_dcf(fund, price, g_term=0.025, wacc_override=None, n_near=5, n_far=5):
+def reverse_dcf(fund, price, params=None, g_term=None, wacc_override=None, n_near=None, n_far=None):
     """Bisection solve: what g_near makes IV per share = price?"""
     shares = fund.get("sharesOut")
     if not shares or shares <= 0 or not fund.get("fcfTTM"):
         return None
-    w = wacc_override if wacc_override is not None else wacc(fund)
+    p = params or {}
+    g_term = p.get("gTerm", 0.025) if g_term is None else g_term
+    n_near = int(p.get("nNear", 5)) if n_near is None else n_near
+    n_far = int(p.get("nFar", 5)) if n_far is None else n_far
+    g_far_fixed = p.get("gFar")
+    w = wacc_override if wacc_override is not None else p.get("wacc", wacc(fund))
     target_equity = price * shares
     target_ev = target_equity + (fund.get("netDebt") or 0)
 
     def ev_at(g):
-        return two_stage_ev(fund["fcfTTM"], g, g * 0.5, g_term, w, n_near, n_far)
+        g_far = g_far_fixed if g_far_fixed is not None else g * 0.5
+        return two_stage_ev(fund["fcfTTM"], g, g_far, g_term, w, n_near, n_far)
 
     lo, hi = -0.40, 0.80
     # sanity: EV monotonic in g near this range; otherwise clamp
@@ -264,9 +270,10 @@ def analyze_dcf(fund, params=None):
             if mos_cons > 0:
                 sig = "buy"
 
-    impl_g = reverse_dcf(fund, price)
+    impl_g = reverse_dcf(fund, price, params=params)
     g_prior = mc["gPrior"]
     g_sigma = mc["gSigma"]
+    impl_g_text = f"{impl_g*100:.0f}%" if impl_g is not None else "N/A"
 
     # How unrealistic is implied growth vs historical?
     if impl_g is not None and g_sigma > 0:
@@ -287,19 +294,19 @@ def analyze_dcf(fund, params=None):
     # plain language
     if sig == "strong-buy":
         plain = (f"Significantly undervalued — conservative DCF ({iv_p25:.2f}) shows ~{mos_cons:.0f}% upside "
-                 f"even under pessimistic assumptions. Market pricing in just {impl_g*100:.0f}% growth vs "
+                 f"even under pessimistic assumptions. Market pricing in just {impl_g_text} growth vs "
                  f"historical {g_prior*100:.0f}%.")
     elif sig == "buy":
         plain = (f"Undervalued — DCF median fair value ${iv_med:.2f} implies {mos_med:.0f}% upside. "
-                 f"Market pricing in {impl_g*100:.0f}% growth.")
+                 f"Market pricing in {impl_g_text} growth.")
     elif sig == "fair":
         plain = (f"Roughly fair — DCF range ${iv_p25:.2f}–${iv_p75:.2f} brackets current price. "
-                 f"Market pricing in {impl_g*100:.0f}% growth vs historical {g_prior*100:.0f}%.")
+                 f"Market pricing in {impl_g_text} growth vs historical {g_prior*100:.0f}%.")
     elif sig == "sell":
-        plain = (f"Overvalued by DCF — market demands {impl_g*100:.0f}% growth ({z_impl:+.1f}σ vs historical). "
+        plain = (f"Overvalued by DCF — market demands {impl_g_text} growth ({z_impl:+.1f}σ vs historical). "
                  f"Even the optimistic p75 (${iv_p75:.2f}) is {abs(mos_opt):.0f}% below price.")
     else:
-        plain = (f"Significantly overvalued — market demands {impl_g*100:.0f}% growth "
+        plain = (f"Significantly overvalued — market demands {impl_g_text} growth "
                  f"({z_impl:+.1f}σ vs historical) which is historically implausible.")
 
     # Reasons list — mirrors MR reasons style
@@ -308,7 +315,7 @@ def analyze_dcf(fund, params=None):
     reasons.append(f"Historical FCF growth: {g_prior*100:+.1f}% ± {g_sigma*100:.1f}%")
     reasons.append(f"WACC (CAPM, β={fund.get('beta') or 1:.2f}): {mc['waccBase']*100:.2f}%")
     reasons.append(f"DCF IV range (Monte Carlo, {mc['n']} sims): ${iv_p25:.2f} – ${iv_med:.2f} – ${iv_p75:.2f}")
-    reasons.append(f"Implied growth from current price: {impl_g*100:+.1f}% ({z_impl:+.1f}σ vs history)")
+    reasons.append(f"Implied growth from current price: {impl_g_text} ({z_impl:+.1f}σ vs history)")
     if z_impl > 1.5:
         reasons.append("⚠ Market pricing in growth > 1.5σ above historical — heroic assumptions required")
     if z_impl < -0.5 and sig in ("buy", "strong-buy"):
@@ -369,33 +376,60 @@ def analyze_dcf(fund, params=None):
 
 # ─── historical backtest ───────────────────────────────────────────────────────
 def dcf_backtest(fund, price_data, params=None):
-    """Walk-forward on annual FCF snapshots.
-    For each historical FCF entry (most recent → oldest), reconstruct a DCF
-    using THAT year's FCF as fcf0 and price at that time, then check 12-mo
-    forward return. Small sample but mathematically honest."""
-    fcf_hist = fund.get("fcfHistory") or []
-    if len(fcf_hist) < 2 or not price_data or len(price_data) < 252:
+    """Walk-forward on dated annual FCF snapshots.
+
+    Uses only FCF history available as of each snapshot date and matches the
+    signal to the market price on or before that date. Yahoo's free feed does
+    not expose reliable historical debt/beta/share series here, so the
+    backtest uses a static-share approximation and neutral capital-structure
+    assumptions instead of leaking today's debt/beta into the past.
+    """
+    fcf_series = fund.get("fcfSeries") or []
+    if len(fcf_series) < 2 or not price_data or len(price_data) < 252:
         return {"trades": 0, "winRate": 50, "avgReturn": 0, "spearman": 0,
                 "method": "insufficient"}
 
     rows = []
-    n = len(price_data)
-    for i, fcf in enumerate(fcf_hist):
-        if i + 1 >= len(fcf_hist):
+    dated_series = [x for x in reversed(fcf_series) if x.get("value") and x.get("date")]
+    shares_now = fund.get("sharesOut")
+    if not shares_now or shares_now <= 0:
+        return {"trades": 0, "winRate": 50, "avgReturn": 0, "spearman": 0,
+                "method": "insufficient"}
+
+    price_dates = [row.get("date") for row in price_data]
+
+    def _price_index_on_or_before(target_date):
+        idx = -1
+        for i, dt in enumerate(price_dates):
+            if dt and dt <= target_date:
+                idx = i
+            else:
+                break
+        return idx
+
+    for i, point in enumerate(dated_series):
+        if i + 1 >= len(dated_series):
             break
+        fcf = point.get("value")
         if not fcf or fcf <= 0:
             continue
-        years_ago = i + 1
-        idx_then = n - 1 - years_ago * 252
+        idx_then = _price_index_on_or_before(point["date"])
         idx_fwd  = idx_then + 252
-        if idx_then < 0 or idx_fwd >= n:
+        if idx_then < 0 or idx_fwd >= len(price_data):
             continue
         price_then = price_data[idx_then]["c"]
         price_fwd  = price_data[idx_fwd]["c"]
+        hist_then = dated_series[:i+1]
         snap = dict(fund)
         snap["fcfTTM"] = fcf
-        snap["fcfHistory"] = fcf_hist[i:]
+        snap["fcfHistory"] = [x["value"] for x in reversed(hist_then)]
         snap["currentPrice"] = price_then
+        snap["sharesOut"] = shares_now
+        snap["marketCap"] = price_then * shares_now
+        snap["netDebt"] = 0
+        snap["totalDebt"] = 0
+        snap["totalCash"] = 0
+        snap["beta"] = 1.0
         r = analyze_dcf(snap, params)
         if not r or not r.get("ok"):
             continue
@@ -446,5 +480,5 @@ def dcf_backtest(fund, price_data, params=None):
         "winRate": wr,
         "avgReturn": round(avg_ret, 2),
         "spearman": round(spearman, 3),
-        "method": "annual-fcf-walkforward",
+        "method": "dated-fcf-walkforward",
     }

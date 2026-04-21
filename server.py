@@ -20,6 +20,10 @@ from core.storage import (load_journal, save_journal,
                           load_profiles, save_profiles,
                           get_mr_params, get_dcf_params, calibration_factor)
 
+class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
 # ═══ HTTP ═══════════════════════════════════════════════════════════════════
 class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args): pass
@@ -203,19 +207,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if ga_state["running"]:
                 self.send_json({"ok": False, "error": "Already running"}); return
             tickers = body.get("tickers", [])
-            closes_list = []
+            price_series_list = []
             for tk in [t.strip().upper() for t in tickers if t.strip()]:
                 raw = fetch_ticker(tk)
                 if raw and len(raw["data"]) >= 60:
-                    closes_list.append([d["c"] for d in raw["data"]])
-            if not closes_list:
+                    price_series_list.append(raw["data"])
+            if not price_series_list:
                 self.send_json({"ok": False, "error": "No data — run scanner first"}); return
             t = threading.Thread(
                 target=run_ga_mr,
-                args=(closes_list, body.get("gaParams", {}), body.get("ticker", "portfolio")),
+                args=(price_series_list, body.get("gaParams", {}), body.get("ticker", "portfolio")),
                 daemon=True)
             t.start()
-            self.send_json({"ok": True, "stocks": len(closes_list)})
+            self.send_json({"ok": True, "stocks": len(price_series_list)})
             return
 
         if parsed.path == "/api/ga_dcf_start":
@@ -290,8 +294,7 @@ if __name__ == "__main__":
         sys.exit(1)
     print("  Stop  : Ctrl+C")
     print("="*60)
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        httpd.allow_reuse_address = True
+    with ThreadingTCPServer(("", PORT), Handler) as httpd:
         log(f"Server ready — http://localhost:{PORT}")
         try: httpd.serve_forever()
         except KeyboardInterrupt: print("\nStopped.")

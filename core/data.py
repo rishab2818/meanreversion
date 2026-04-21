@@ -238,6 +238,11 @@ def _fetch_timeseries(ticker, crumb):
         out[type_name] = parsed
     return out
 
+def _sorted_series_values(series):
+    clean = [x for x in (series or []) if x.get("value") is not None]
+    clean.sort(key=lambda x: x.get("date") or "")
+    return clean
+
 def fetch_fundamentals(ticker):
     """Fetch fundamentals: quoteSummary (TTM snapshot) + timeseries (history)."""
     now = time.time()
@@ -271,26 +276,27 @@ def fetch_fundamentals(ticker):
     # Enrich with timeseries history (FCF, revenue, NI history)
     try:
         ts = _fetch_timeseries(ticker, crumb)
-        fcf_series = ts.get("annualFreeCashFlow", [])
+        fcf_series = _sorted_series_values(ts.get("annualFreeCashFlow", []))
         # most-recent-first
-        fcf_hist = [x["value"] for x in reversed(fcf_series) if x.get("value") is not None]
+        fcf_hist = [x["value"] for x in reversed(fcf_series)]
         if fcf_hist:
             f["fcfHistory"] = fcf_hist
+            f["fcfSeries"] = list(reversed(fcf_series))
             # If TTM FCF is missing, use most recent annual as fallback
             if not f.get("fcfTTM"):
                 f["fcfTTM"] = fcf_hist[0]
-        rev_series = ts.get("annualTotalRevenue", [])
+        rev_series = _sorted_series_values(ts.get("annualTotalRevenue", []))
         if rev_series:
-            f["revHistory"] = [x["value"] for x in reversed(rev_series) if x.get("value") is not None]
-        ni_series = ts.get("annualNetIncome", [])
+            f["revHistory"] = [x["value"] for x in reversed(rev_series)]
+        ni_series = _sorted_series_values(ts.get("annualNetIncome", []))
         if ni_series:
-            f["niHistory"] = [x["value"] for x in reversed(ni_series) if x.get("value") is not None]
-        ocf_series = ts.get("annualOperatingCashFlow", [])
+            f["niHistory"] = [x["value"] for x in reversed(ni_series)]
+        ocf_series = _sorted_series_values(ts.get("annualOperatingCashFlow", []))
         if ocf_series:
-            f["ocfHistory"] = [x["value"] for x in reversed(ocf_series) if x.get("value") is not None]
-        ta_series = ts.get("annualTotalAssets", [])
+            f["ocfHistory"] = [x["value"] for x in reversed(ocf_series)]
+        ta_series = _sorted_series_values(ts.get("annualTotalAssets", []))
         if ta_series:
-            f["totalAssetsHistory"] = [x["value"] for x in reversed(ta_series) if x.get("value") is not None]
+            f["totalAssetsHistory"] = [x["value"] for x in reversed(ta_series)]
     except Exception as e:
         log(f"  $ {ticker} timeseries enrichment failed: {e}")
 

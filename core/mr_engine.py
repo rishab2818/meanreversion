@@ -52,6 +52,30 @@ def _agg_trades(trades):
     ar = sum(t["ret"] for t in trades)/n
     return {"winRate": round(wr, 1), "avgReturn": round(ar, 3), "trades": n}
 
+def _trade_levels(cur, atr_v, band, reg, direction):
+    """Build stops/targets while guaranteeing the correct side of entry."""
+    tick = max(cur * 0.002, atr_v * 0.25, 0.01)
+    atr_mult = 1.2 if "rang" in reg else (2.0 if "strong" in reg else 1.5)
+    if direction == "LONG":
+        raw_stop = max(cur - atr_v * atr_mult, band["lower"] * 0.96)
+        stop = min(raw_stop, cur - tick)
+        t1 = max(band["middle"], cur + tick)
+        t2 = max(band["upper"] * 0.96, t1 + tick)
+        t3 = max(band["upper"] + (band["upper"] - band["lower"]) * 0.4, t2 + tick)
+        return round(stop, 4), round(t1, 4), round(t2, 4), round(t3, 4)
+    if direction == "SHORT":
+        raw_stop = min(cur + atr_v * atr_mult, band["upper"] * 1.04)
+        stop = max(raw_stop, cur + tick)
+        t1 = min(band["middle"], cur - tick)
+        t2 = min(band["lower"] * 1.04, t1 - tick)
+        t3 = min(band["lower"] - (band["upper"] - band["lower"]) * 0.4, t2 - tick)
+        return round(stop, 4), round(t1, 4), round(t2, 4), round(t3, 4)
+    stop = cur - max(atr_v * 1.5, tick)
+    t1 = max(band["middle"], cur + tick)
+    t2 = max(band["upper"], t1 + tick)
+    t3 = max(t2, cur + 2 * tick)
+    return round(stop, 4), round(t1, 4), round(t2, 4), round(t3, 4)
+
 def backtest(data, params, n_folds=4, purge=3):
     """Walk-forward backtest with purged k-fold stats + per-regime win rates.
 
@@ -68,7 +92,8 @@ def backtest(data, params, n_folds=4, purge=3):
     if len(closes) < warmup + 20:
         return {"winRate":50,"avgReturn":0.0,"trades":0,"sharpe":0,
                 "maxDD":0,"pf":1,"method":"insufficient",
-                "medianFoldWR":50,"foldSpread":0,"regimeStats":{},"execCostBps":0}
+                "medianFoldWR":50,"foldSpread":0,"regimeStats":{},"execCostBps":0,
+                "winRateRaw":50,"avgHold":0}
 
     fold_sz = max(15, (len(closes)-warmup)//n_folds)
     trades = []
@@ -112,26 +137,29 @@ def backtest(data, params, n_folds=4, purge=3):
             if not future:
                 continue
             ret = 0.0
-            for f in future:
+            bars_held = len(future)
+            for step, f in enumerate(future, start=1):
                 if direction == 1:
-                    if f >= target: ret = (f-cur)/cur*100; break
-                    if f <= stop:   ret = (f-cur)/cur*100; break
+                    if f >= target: ret = (f-cur)/cur*100; bars_held = step; break
+                    if f <= stop:   ret = (f-cur)/cur*100; bars_held = step; break
                 else:
-                    if f <= target: ret = (cur-f)/cur*100; break
-                    if f >= stop:   ret = (cur-f)/cur*100; break
+                    if f <= target: ret = (cur-f)/cur*100; bars_held = step; break
+                    if f >= stop:   ret = (cur-f)/cur*100; bars_held = step; break
             else:
                 f = future[-1]
                 ret = ((f-cur)/cur*100) if direction == 1 else ((cur-f)/cur*100)
             ret_net = ret - cost_pct   # subtract round-trip cost
             tr = {"ret": ret_net, "retGross": ret, "win": ret_net > 0, "fold": fold,
-                  "regime": reg, "direction": "LONG" if direction == 1 else "SHORT"}
+                  "regime": reg, "direction": "LONG" if direction == 1 else "SHORT",
+                  "barsHeld": bars_held}
             trades.append(tr)
             fold_trades[fold].append(tr)
 
     if not trades:
         return {"winRate":50,"avgReturn":0.0,"trades":0,"sharpe":0,
                 "maxDD":0,"pf":1,"method":"no_signals",
-                "medianFoldWR":50,"foldSpread":0,"regimeStats":{},"execCostBps":0}
+                "medianFoldWR":50,"foldSpread":0,"regimeStats":{},"execCostBps":0,
+                "winRateRaw":50,"avgHold":0}
 
     # Overall (in-sample-ish) stats
     wins = sum(1 for t in trades if t["win"]); n = len(trades)
@@ -139,7 +167,9 @@ def backtest(data, params, n_folds=4, purge=3):
     ar = sum(t["ret"] for t in trades)/n
     rets = [t["ret"] for t in trades]
     std_r = math.sqrt(sum((r-ar)**2 for r in rets)/max(n-1, 1))
-    sharpe = round(ar/std_r*math.sqrt(52), 2) if std_r > 0 else 0
+    avg_hold = sum(t.get("barsHeld", 1) for t in trades) / n
+    annual_factor = math.sqrt(252 / max(avg_hold, 1))
+    sharpe = round(ar/std_r*annual_factor, 2) if std_r > 0 else 0
     gross_w = sum(t["ret"] for t in trades if t["win"])
     gross_l = abs(sum(t["ret"] for t in trades if not t["win"]))
     pf = round(gross_w/max(gross_l, 0.01), 2)
@@ -166,13 +196,16 @@ def backtest(data, params, n_folds=4, purge=3):
         median_fold_wr = wr_raw
         fold_spread = 0
 
-    # Conservative reported win rate: shrink toward 50 using the pessimistic
-    # of (overall, median-fold). This is what gets shown to the user.
-    wr_reported = min(wr_raw, median_fold_wr)
+    # Conservative reported win rate:
+    # 1) empirical raw hit-rate
+    # 2) median OOS fold hit-rate
+    # 3) Bayesian shrink toward 50% for small samples
+    wr_bayes = (wins + 5) / (n + 10) * 100
+    wr_reported = min(wr_raw, median_fold_wr, wr_bayes)
     # Small honesty-penalty when folds disagree wildly (overfitting symptom)
     if fold_spread > 30:
         wr_reported -= (fold_spread - 30) * 0.3
-    wr_bounded = min(85, max(35, round(wr_reported)))
+    wr_model = max(0.0, min(100.0, wr_reported))
 
     # Per-regime breakdown
     regime_stats = {}
@@ -185,14 +218,17 @@ def backtest(data, params, n_folds=4, purge=3):
                 br = sum(t["ret"] for t in bucket) / len(bucket)
                 regime_stats[key] = {"wr": round(bw, 1), "avgRet": round(br, 2), "n": len(bucket)}
 
-    return {"winRate": wr_bounded,
+    return {"winRate": round(wr_model, 1),
+            "winRateRaw": round(wr_raw, 1),
+            "winRateBayes": round(wr_bayes, 1),
             "avgReturn": round(ar, 3), "trades": n,
             "sharpe": sharpe, "maxDD": round(mdd, 1), "pf": pf,
             "method": "purged-walk-forward",
             "medianFoldWR": round(median_fold_wr, 1),
             "foldSpread": round(fold_spread, 1),
             "regimeStats": regime_stats,
-            "execCostBps": round(cost_pct * 100, 1)}
+            "execCostBps": round(cost_pct * 100, 1),
+            "avgHold": round(avg_hold, 2)}
 
 def analyze(raw, params, meta=None):
     """Produce a scanner row. `meta` may contain short interest / insider data
@@ -380,26 +416,17 @@ def analyze(raw, params, meta=None):
     direction = "LONG"  if sig in ("strong-buy","buy")   else \
                 "SHORT" if sig in ("strong-sell","sell") else "WAIT"
 
-    atr_mult = 1.2 if "rang" in reg else (2.0 if "strong" in reg else 1.5)
-    if direction == "LONG":
-        stop = max(cur - atr_v*atr_mult, b_v["lower"]*0.96)
-        t1 = b_v["middle"]; t2 = b_v["upper"]*0.96
-        t3 = b_v["upper"] + (b_v["upper"]-b_v["lower"])*0.4
-    elif direction == "SHORT":
-        stop = min(cur + atr_v*atr_mult, b_v["upper"]*1.04)
-        t1 = b_v["middle"]; t2 = b_v["lower"]*1.04
-        t3 = b_v["lower"] - (b_v["upper"]-b_v["lower"])*0.4
-    else:
-        stop = cur - atr_v*1.5; t1 = b_v["middle"]; t2 = b_v["upper"]; t3 = b_v["upper"]
+    stop, t1, t2, t3 = _trade_levels(cur, atr_v, b_v, reg, direction)
 
     risk = abs(cur-stop); reward = abs(t1-cur)
     rr = reward/risk if risk > 0 else 0
-    ev_raw = (bt["winRate"]/100)*reward - (1-bt["winRate"]/100)*risk
+    bt_win = bt.get("winRate", 50)
+    ev_raw = (bt_win/100)*reward - (1-bt_win/100)*risk
 
     # Journal-tuned Kelly: realized-WR / predicted-WR calibration
     calib = meta.get("calibration") if meta else None
     calib_factor = (calib or {}).get("factor", 1.0)
-    pos_size = ou_position_size(1000, z_v, hl, bt["winRate"], rr, calibration=calib_factor)
+    pos_size = ou_position_size(1000, z_v, hl, bt_win, rr, calibration=calib_factor)
     shares_at_1k = round(pos_size/cur, 4) if cur > 0 else 0
 
     if   sig == "strong-buy":  plain = "Strong buy — multiple indicators say this is unusually cheap right now. Good risk/reward."
@@ -416,7 +443,8 @@ def analyze(raw, params, meta=None):
         "bbMid": round(b_v["middle"], 4),
         "sig": sig, "score": round(score, 2), "direction": direction,
         "plain": plain,
-        "winRate": bt["winRate"], "avgRet": bt["avgReturn"],
+        "winRate": bt["winRate"], "winRateRaw": bt.get("winRateRaw"),
+        "winRateBayes": bt.get("winRateBayes"), "avgRet": bt["avgReturn"],
         "trades": bt["trades"], "sharpe": bt["sharpe"],
         "maxDD": bt["maxDD"], "pf": bt["pf"], "btMethod": bt["method"],
         "medianFoldWR": bt.get("medianFoldWR"),
@@ -436,8 +464,8 @@ def analyze(raw, params, meta=None):
         "ivATM":       meta.get("ivATM") if meta else None,
         "ivPremium":   meta.get("ivPremium") if meta else None,
         "rv30":        meta.get("rv30") if meta else None,
-        "entry": round(cur, 4), "stop": round(stop, 4),
-        "t1": round(t1, 4), "t2": round(t2, 4), "t3": round(t3, 4),
+        "entry": round(cur, 4), "stop": stop,
+        "t1": t1, "t2": t2, "t3": t3,
         "rr": round(rr, 3), "atr": round(atr_v, 4),
         "ma20": round(ma20, 4), "ma50": round(ma50, 4),
         "macdHist": round(m_v["hist"], 4) if m_v else None,
@@ -451,6 +479,7 @@ def analyze(raw, params, meta=None):
         "posSize": pos_size, "sharesAt1k": shares_at_1k,
         "riskPct": round(risk/cur*100, 2) if cur > 0 else 0,
         "rewPct":  round(reward/cur*100, 2) if cur > 0 else 0,
+        "avgHold": bt.get("avgHold"),
         "reasons": reasons,
         "closes60": closes[-60:],
     }
