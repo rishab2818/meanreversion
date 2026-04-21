@@ -1,0 +1,1607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stock Scanner v5</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+:root{
+  --bg:#080b0f;--bg2:#0f1419;--bg3:#161d26;--bg4:#1e2a38;
+  --bdr:#1a2535;--bdr2:#253647;
+  --tx:#d0e4f4;--tx2:#527894;--tx3:#2c4258;
+  --gr:#00e896;--gr2:#00c07a;
+  --rd:#ff3355;--am:#ffaa22;--bl:#4db0ff;--cy:#00dde8;--pu:#bb88ff;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--tx);font-family:var(--sans);font-size:13px}
+
+/* APP SHELL */
+#app{display:grid;grid-template-rows:52px 1fr;height:100vh}
+#bar{display:flex;align-items:center;padding:0 20px;background:var(--bg2);border-bottom:1px solid var(--bdr);gap:4px}
+.logo{font-family:var(--mono);font-weight:600;font-size:15px;color:var(--gr);margin-right:16px;letter-spacing:-.3px;flex-shrink:0}
+.tab{font-size:12px;font-weight:500;padding:6px 14px;border-radius:6px;border:none;background:none;color:var(--tx2);cursor:pointer;transition:all .12s;white-space:nowrap}
+.tab:hover{color:var(--tx);background:var(--bg3)}
+.tab.on{background:var(--bg4);color:var(--tx);border:1px solid var(--bdr2)}
+.bar-r{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:11px;flex-shrink:0}
+.live{color:var(--gr);font-family:var(--mono)}
+.ts{color:var(--tx3);font-family:var(--mono);font-size:10px}
+
+#body{overflow:hidden;display:flex;flex-direction:column}
+.pane{display:none;flex-direction:column;height:100%;overflow:hidden}
+.pane.on{display:flex}
+.scroll{overflow-y:auto;flex:1}
+
+/* CONTROL STRIP */
+.strip{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px 16px;background:var(--bg2);border-bottom:1px solid var(--bdr);flex-shrink:0}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fl{font-size:10px;color:var(--tx3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em}
+select,input[type=text]{background:var(--bg3);border:1px solid var(--bdr2);color:var(--tx);font-family:var(--sans);font-size:12px;padding:5px 9px;border-radius:6px;outline:none}
+select:focus,input:focus{border-color:var(--gr)}
+.btn{font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 16px;border-radius:6px;border:none;cursor:pointer;transition:all .12s;white-space:nowrap}
+.btn-scan{background:var(--gr);color:#000}.btn-scan:hover{background:var(--gr2)}.btn-scan:disabled{background:var(--bdr2);color:var(--tx3);cursor:not-allowed}
+.btn-ghost{background:transparent;color:var(--tx2);border:1px solid var(--bdr2)}.btn-ghost:hover{border-color:var(--bdr);color:var(--tx)}
+.btn-purple{background:rgba(187,136,255,.12);color:var(--pu);border:1px solid rgba(187,136,255,.2)}.btn-purple:hover{background:rgba(187,136,255,.2)}
+.btn-blue{background:rgba(77,176,255,.1);color:var(--bl);border:1px solid rgba(77,176,255,.2)}.btn-blue:hover{background:rgba(77,176,255,.2)}
+.btn-red{background:rgba(255,51,85,.08);color:var(--rd);border:1px solid rgba(255,51,85,.2)}.btn-red:hover{background:rgba(255,51,85,.15)}
+.btn-sm{font-size:11px;padding:4px 10px;border-radius:4px}
+
+/* BANNER */
+.bnr{padding:8px 14px;border-radius:6px;font-size:12px;display:none;flex-shrink:0;line-height:1.7;margin:8px 16px 0}
+.bnr.show{display:block}
+.bnr.err{background:rgba(255,51,85,.08);border:1px solid rgba(255,51,85,.2);color:var(--rd)}
+.bnr.info{background:rgba(77,176,255,.07);border:1px solid rgba(77,176,255,.18);color:var(--bl)}
+.bnr.warn{background:rgba(255,170,34,.07);border:1px solid rgba(255,170,34,.18);color:var(--am)}
+.bnr.ok{background:rgba(0,232,150,.07);border:1px solid rgba(0,232,150,.18);color:var(--gr)}
+
+/* PROGRESS */
+.prog{display:none;padding:0 16px;flex-shrink:0;margin-top:8px}
+.prog.show{display:block}
+.ph{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--tx2);margin-bottom:4px}
+.pb{background:var(--bg3);border-radius:2px;height:2px}
+.pf{height:2px;background:var(--gr);border-radius:2px;transition:width .2s;width:0}
+.pl{font-family:var(--mono);font-size:10px;color:var(--tx3);margin-top:3px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}.blink{animation:blink .7s ease-in-out infinite}
+
+/* STATS ROW */
+.stats{display:flex;gap:8px;padding:10px 16px;flex-shrink:0;overflow-x:auto}
+.stat{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:8px 14px;flex-shrink:0;min-width:100px}
+.stat-l{font-size:10px;color:var(--tx3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
+.stat-v{font-family:var(--mono);font-size:18px;font-weight:600}
+.stat-v.g{color:var(--gr)}.stat-v.r{color:var(--rd)}.stat-v.a{color:var(--am)}.stat-v.b{color:var(--bl)}.stat-v.p{color:var(--pu)}
+
+/* FILTER PILLS */
+.filters{display:flex;gap:6px;padding:10px 16px 0;flex-shrink:0;flex-wrap:wrap}
+.fp{font-size:11px;font-weight:500;padding:4px 12px;border-radius:20px;border:1px solid var(--bdr);background:none;color:var(--tx2);cursor:pointer}
+.fp:hover{border-color:var(--bdr2);color:var(--tx)}
+.fp.on{background:var(--gr);color:#000;border-color:var(--gr)}
+.fp.on-r{background:var(--rd);color:#fff;border-color:var(--rd)}
+
+/* TABLE */
+.tw{overflow:auto;flex:1;padding:0 16px 16px}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;margin-top:8px}
+th{padding:6px 10px;text-align:left;font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--bdr);cursor:pointer;user-select:none;white-space:nowrap;position:sticky;top:0;background:var(--bg);z-index:2}
+th:hover{color:var(--tx2)}
+th.srt{color:var(--gr)}
+tr{border-bottom:1px solid rgba(26,37,53,.7);cursor:pointer;transition:background .08s}
+tr:hover{background:var(--bg2)}
+td{padding:9px 10px;white-space:nowrap;vertical-align:middle}
+
+/* SIGNAL BADGES */
+.sbdg{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600;letter-spacing:.02em}
+.sb{background:rgba(0,232,150,.12);color:var(--gr);border:1px solid rgba(0,232,150,.2)}
+.b_{background:rgba(0,192,122,.08);color:#00d48a;border:1px solid rgba(0,192,122,.15)}
+.ss{background:rgba(255,51,85,.12);color:var(--rd);border:1px solid rgba(255,51,85,.2)}
+.s_{background:rgba(255,51,85,.07);color:#ff6077;border:1px solid rgba(255,51,85,.12)}
+.nn{background:rgba(82,120,148,.08);color:var(--tx2);border:1px solid rgba(82,120,148,.12)}
+
+/* DETAIL DRAWER */
+#detail{display:none;background:var(--bg2);border-top:1px solid var(--bdr2);flex-shrink:0;max-height:50vh;overflow-y:auto}
+#detail.show{display:block}
+.d-inner{padding:16px}
+.d-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+.d-tk{font-family:var(--mono);font-size:20px;font-weight:600;color:var(--gr);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.d-nm{font-size:11px;color:var(--tx2);margin-top:2px}
+.d-plain{font-size:13px;color:var(--tx);font-weight:500;margin-bottom:12px;padding:10px 14px;background:var(--bg3);border-radius:8px;border-left:3px solid var(--gr)}
+.d-plain.sell{border-left-color:var(--rd)}
+.d-plain.wait{border-left-color:var(--tx3)}
+.d-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:12px}
+.d-card{background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px}
+.d-cl{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.d-cv{font-family:var(--mono);font-size:14px;font-weight:600;margin-bottom:2px}
+.d-cs{font-size:11px;color:var(--tx2);line-height:1.5}
+.d-plans{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.d-plan{background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;padding:12px 14px;font-family:var(--mono);font-size:11px}
+.d-plan-t{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;font-family:var(--sans)}
+.d-row{display:flex;justify-content:space-between;border-bottom:1px solid var(--bdr);padding:4px 0;gap:8px}
+.d-row:last-child{border-bottom:none}
+.dk{color:var(--tx2);min-width:100px}.dv{font-weight:600;text-align:right}
+.reasons-box{background:var(--bg);border-radius:6px;border:1px solid var(--bdr);padding:10px 12px;font-size:11px;color:var(--tx2);line-height:1.9}
+.reason{display:flex;align-items:flex-start;gap:6px}
+.reason::before{content:'▸';color:var(--gr);flex-shrink:0;margin-top:1px}
+.reason.neg::before{color:var(--am)}
+.reason.bad::before{color:var(--rd)}
+.xbtn{background:none;border:none;color:var(--tx3);font-size:18px;cursor:pointer;padding:2px 6px;flex-shrink:0}.xbtn:hover{color:var(--tx)}
+.d-actions{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+
+/* ML PANE */
+.ml-body{padding:16px;display:flex;flex-direction:column;gap:12px}
+.ml-grid{display:grid;grid-template-columns:300px 1fr;gap:12px}
+.ml-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:14px}
+.ml-title{font-size:13px;font-weight:600;color:var(--tx);margin-bottom:12px}
+.ml-row{display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:12px}
+.ml-lbl{color:var(--tx2);min-width:110px;font-size:11px}
+input[type=range]{accent-color:var(--gr);flex:1}
+.rv{font-family:var(--mono);font-size:11px;color:var(--gr);min-width:36px;text-align:right}
+.ga-prog{display:none;margin-bottom:8px}
+.ga-prog.show{display:block}
+.ga-ph{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--tx2);margin-bottom:4px}
+.ga-pb{background:var(--bg3);border-radius:2px;height:3px}
+.ga-pf{height:3px;background:var(--pu);border-radius:2px;transition:width .1s}
+.ga-log{font-family:var(--mono);font-size:10px;color:var(--tx3);height:120px;overflow-y:auto;background:var(--bg);border-radius:6px;padding:8px;border:1px solid var(--bdr);line-height:1.6;margin-top:8px}
+.fit-wrap{height:140px;background:var(--bg);border:1px solid var(--bdr);border-radius:6px;margin-top:8px}
+.best-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.bp{background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:7px 9px}
+.bp-l{font-size:9px;color:var(--tx3);text-transform:uppercase;margin-bottom:3px}
+.bp-v{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--cy)}
+.top10-wrap{margin-top:0}
+
+/* MONTE CARLO PANE */
+.mc-body{padding:16px;display:flex;flex-direction:column;gap:12px}
+.mc-hero{background:linear-gradient(135deg,rgba(0,232,150,.06),rgba(77,176,255,.04));border:1px solid var(--bdr2);border-radius:10px;padding:16px}
+.mc-hero-t{font-size:14px;font-weight:600;color:var(--tx);margin-bottom:4px}
+.mc-hero-s{font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:14px}
+.mc-controls{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px}
+.mc-ctrl{display:flex;flex-direction:column;gap:4px}
+.mc-ctrl-l{font-size:11px;color:var(--tx2)}
+.mc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mc-outcomes{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.mc-out{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;text-align:center}
+.mc-out-l{font-size:10px;color:var(--tx3);text-transform:uppercase;margin-bottom:4px}
+.mc-out-v{font-family:var(--mono);font-size:18px;font-weight:600}
+.mc-interp{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:14px;font-size:12px;line-height:1.9;color:var(--tx2)}
+.mc-interp strong{color:var(--tx)}
+.mc-chart-wrap{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:12px;height:220px;position:relative}
+
+/* CORRELATION PANE */
+.corr-body{padding:16px;display:flex;flex-direction:column;gap:12px}
+.spread-cards{display:flex;flex-wrap:wrap;gap:8px}
+.spread-card{background:var(--bg2);border:1px solid var(--bdr2);border-radius:8px;padding:12px 14px;min-width:240px;max-width:340px}
+.spread-tk{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--tx);margin-bottom:4px}
+.spread-z{font-family:var(--mono);font-size:18px;font-weight:600;margin-bottom:2px}
+.spread-dir{font-size:11px;color:var(--gr);margin-bottom:4px}
+.spread-plain{font-size:11px;color:var(--tx2);line-height:1.5}
+.corr-matrix table{width:auto}
+.corr-cell{font-family:var(--mono);font-size:10px;font-weight:600;padding:5px 8px;text-align:center;min-width:48px}
+
+/* JOURNAL PANE */
+.j-body{padding:16px;display:flex;flex-direction:column;gap:12px}
+.j-warning{background:rgba(255,51,85,.08);border:1px solid rgba(255,51,85,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--rd);display:none}
+.j-warning.show{display:block}
+.j-form-wrap{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:14px}
+.j-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+input[type=number]{background:var(--bg3);border:1px solid var(--bdr2);color:var(--tx);font-family:var(--mono);font-size:12px;padding:5px 9px;border-radius:6px;outline:none;width:80px}
+input[type=number]:focus{border-color:var(--gr)}
+.j-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.j-stat{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:9px 12px}
+.j-stat-l{font-size:10px;color:var(--tx3);text-transform:uppercase;margin-bottom:3px}
+.j-stat-v{font-family:var(--mono);font-size:17px;font-weight:600}
+.j-tw{overflow:auto;flex:1}
+
+/* EMPTY STATE */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;color:var(--tx3);text-align:center;gap:10px;flex:1}
+.empty-icon{font-size:32px;opacity:.3}
+.empty-t{font-size:14px;color:var(--tx2);font-weight:500}
+.empty-s{font-size:12px;color:var(--tx3);line-height:1.7;max-width:340px}
+</style>
+</head>
+<body>
+<div id="app">
+<div id="bar">
+  <div class="logo">MR SCANNER v5</div>
+  <button class="tab on" onclick="go('scanner',this)">Scanner</button>
+  <button class="tab" onclick="go('dcf',this)">Value (DCF)</button>
+  <button class="tab" onclick="go('ml',this)">ML Optimizer</button>
+  <button class="tab" onclick="go('montecarlo',this)">Risk Simulator</button>
+  <button class="tab" onclick="go('correlation',this)">Pairs</button>
+  <button class="tab" onclick="go('journal',this)">Journal</button>
+  <div class="bar-r">
+    <span class="live" id="ls">● Ready</span>
+    <span class="ts" id="ts">localhost:7432</span>
+  </div>
+</div>
+<div id="body">
+
+<!-- ══════════════ SCANNER ══════════════ -->
+<div class="pane on" id="p-scanner">
+  <div class="strip">
+    <div class="fg"><div class="fl">Watchlist</div>
+      <select id="wl-sel">
+        <option value="yours">Your Stocks</option>
+        <option value="top50vol">Top 50 Volume</option>
+        <option value="sp500">Full S&P 500 (slow)</option>
+        <option value="custom">Custom</option>
+      </select>
+    </div>
+    <div class="fg" id="custom-wrap" style="display:none"><div class="fl">Tickers</div>
+      <input type="text" id="custom-in" placeholder="AAPL,TSLA,META" style="width:200px">
+    </div>
+    <div class="fg"><div class="fl">Show signals</div>
+      <select id="sig-filter">
+        <option value="all">All signals</option>
+        <option value="buy">Buy signals only</option>
+        <option value="sell">Sell signals only</option>
+        <option value="action">Any action (buy + sell)</option>
+      </select>
+    </div>
+    <div class="fg"><div class="fl">Min win rate</div>
+      <select id="min-wr">
+        <option value="0">Show all</option>
+        <option value="55" selected>55%+</option>
+        <option value="60">60%+</option>
+        <option value="65">65%+</option>
+      </select>
+    </div>
+    <div class="fg"><div class="fl">Include DCF</div>
+      <select id="scan-dcf">
+        <option value="0" selected>Off (faster)</option>
+        <option value="1">On (adds fair value)</option>
+      </select>
+    </div>
+    <div class="fg" style="justify-content:flex-end"><div class="fl">&nbsp;</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-scan" id="scan-btn" onclick="startScan()">▶ Scan</button>
+        <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+      </div>
+    </div>
+  </div>
+  <div class="bnr" id="bnr"></div>
+  <div class="prog" id="prog">
+    <div class="ph"><span class="blink" id="plbl">Scanning...</span><span id="ppct">0%</span></div>
+    <div class="pb"><div class="pf" id="pf"></div></div>
+    <div class="pl" id="pl"></div>
+  </div>
+  <div class="stats" id="stats" style="display:none">
+    <div class="stat"><div class="stat-l">Scanned</div><div class="stat-v b" id="st-n">0</div></div>
+    <div class="stat"><div class="stat-l">Buy signals</div><div class="stat-v g" id="st-buy">0</div></div>
+    <div class="stat"><div class="stat-l">Sell signals</div><div class="stat-v r" id="st-sell">0</div></div>
+    <div class="stat"><div class="stat-l">Best win rate</div><div class="stat-v a" id="st-bwr">—</div></div>
+    <div class="stat"><div class="stat-l">Best pick</div><div class="stat-v g" id="st-bp">—</div></div>
+    <div class="stat"><div class="stat-l">Avg Sharpe</div><div class="stat-v p" id="st-sh">—</div></div>
+  </div>
+  <div class="filters" id="filters" style="display:none">
+    <button class="fp on" onclick="filterTab('all',this)">All</button>
+    <button class="fp" onclick="filterTab('strong-buy',this)">Strong Buy</button>
+    <button class="fp" onclick="filterTab('buy',this)">Buy</button>
+    <button class="fp" onclick="filterTab('strong-sell',this)" style="border-color:rgba(255,51,85,.3);color:var(--rd)">Strong Sell</button>
+    <button class="fp" onclick="filterTab('sell',this)" style="border-color:rgba(255,51,85,.2);color:#ff6077">Sell</button>
+  </div>
+  <div id="detail" class="scroll"></div>
+  <div class="tw" id="tw">
+    <div class="empty">
+      <div class="empty-icon">◎</div>
+      <div class="empty-t">Choose a watchlist and press Scan</div>
+      <div class="empty-s">The scanner finds stocks that are unusually far from their average price — these tend to snap back. No API key needed.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ ML OPTIMIZER ══════════════ -->
+<div class="pane" id="p-ml">
+  <div class="scroll">
+  <div class="ml-body">
+    <div class="bnr info show">The ML Optimizer learns which settings work best for your specific stocks. MR mode tunes mean-reversion entry/exit rules; DCF mode tunes valuation priors (growth rates, WACC, margin threshold). Run the Scanner first to load data, then click Run Optimizer.</div>
+    <div class="strip" style="border:none;padding:0 0 10px 0;background:none">
+      <div class="fg"><div class="fl">Mode</div>
+        <select id="ml-mode" onchange="setMLMode(this.value)">
+          <option value="mr">MR — mean reversion rules</option>
+          <option value="dcf">DCF — valuation priors</option>
+        </select>
+      </div>
+      <div class="fg"><div class="fl">Watchlist source</div>
+        <select id="ml-src">
+          <option value="scanner">Use Scanner tickers</option>
+          <option value="dcf">Use DCF tab tickers</option>
+          <option value="yours">Your Stocks</option>
+          <option value="top50vol">Top 50 Volume</option>
+        </select>
+      </div>
+    </div>
+    <div class="ml-grid">
+      <div class="ml-card">
+        <div class="ml-title">Optimizer Settings <span id="ml-mode-tag" style="color:var(--pu);font-family:var(--mono);font-size:10px;margin-left:6px">[MR]</span></div>
+        <div class="ml-row"><span class="ml-lbl">Population size</span><input type="range" id="ga-pop" min="20" max="80" value="40" step="10" oninput="this.nextElementSibling.textContent=this.value"><span class="rv">40</span></div>
+        <div class="ml-row"><span class="ml-lbl">Generations</span><input type="range" id="ga-gen" min="30" max="150" value="80" step="10" oninput="this.nextElementSibling.textContent=this.value"><span class="rv">80</span></div>
+        <div class="ml-row"><span class="ml-lbl">Mutation</span><input type="range" id="ga-mut" min="5" max="35" value="15" step="5" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="rv">15%</span></div>
+        <div class="ml-row"><span class="ml-lbl">Win% weight</span><input type="range" id="ga-fw" min="20" max="80" value="60" step="10" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="rv">60%</span></div>
+        <div class="ml-row"><span class="ml-lbl">Return weight</span><input type="range" id="ga-fr" min="20" max="80" value="40" step="10" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="rv">40%</span></div>
+        <div style="font-size:11px;color:var(--tx3);margin-bottom:10px;line-height:1.7">Higher population/generations = better results but slower. Start with defaults.</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap">
+          <button class="btn btn-purple" id="ml-btn" onclick="startML()">Run Optimizer</button>
+          <button class="btn btn-ghost" id="ml-stop" onclick="stopML()" style="display:none">Stop</button>
+          <button class="btn btn-blue" id="apply-btn" onclick="applyBest()" style="display:none">Apply Best Settings</button>
+        </div>
+        <div class="best-grid" id="best-params" style="display:none"></div>
+        <div id="ml-result-stats" style="display:none;margin-top:10px"></div>
+      </div>
+      <div class="ml-card">
+        <div class="ml-title">Progress</div>
+        <div class="ga-prog" id="ga-prog">
+          <div class="ga-ph"><span class="blink" id="ga-stat">Running...</span><span id="ga-pct">0%</span></div>
+          <div class="ga-pb"><div class="ga-pf" id="ga-bar"></div></div>
+        </div>
+        <div class="fit-wrap"><canvas id="fit-cv"></canvas></div>
+        <div class="ga-log" id="ga-log">Waiting for run...</div>
+      </div>
+    </div>
+    <div class="top10-wrap" id="top10-wrap" style="display:none">
+      <div class="ml-card">
+        <div class="ml-title">Top 10 Settings Found</div>
+        <div style="overflow-x:auto"><table id="t10"><thead><tr><th>#</th><th>RSI</th><th>BB</th><th>Z-Win</th><th>OS Level</th><th>OB Level</th><th>Volume≥</th><th>Win%</th><th>Return%</th><th>Sharpe</th><th>Max Loss%</th><th>Fitness</th><th></th></tr></thead><tbody id="t10b"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<!-- ══════════════ DCF / VALUE ══════════════ -->
+<div class="pane" id="p-dcf">
+  <div class="strip">
+    <div class="fg"><div class="fl">Watchlist</div>
+      <select id="dcf-wl-sel">
+        <option value="yours">Your Stocks</option>
+        <option value="top50vol">Top 50 Volume</option>
+        <option value="sp500">Full S&P 500 (slow)</option>
+        <option value="custom">Custom</option>
+      </select>
+    </div>
+    <div class="fg" id="dcf-custom-wrap" style="display:none"><div class="fl">Tickers</div>
+      <input type="text" id="dcf-custom-in" placeholder="AAPL,XOM,KO" style="width:200px">
+    </div>
+    <div class="fg"><div class="fl">Show</div>
+      <select id="dcf-sig-filter">
+        <option value="all">All</option>
+        <option value="undervalued">Undervalued (buy signals)</option>
+        <option value="overvalued">Overvalued (sell signals)</option>
+        <option value="action">Any action</option>
+      </select>
+    </div>
+    <div class="fg" style="justify-content:flex-end"><div class="fl">&nbsp;</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-scan" id="dcf-btn" onclick="startDCF()">▶ Value Scan</button>
+        <button class="btn btn-ghost" onclick="clearDCF()">Clear</button>
+      </div>
+    </div>
+  </div>
+  <div class="bnr info show" style="margin:8px 16px 0">
+    Two-stage DCF + Monte Carlo (4000 sims per stock). Pulls FCF, shares, beta, debt from Yahoo. Uses CAPM-based WACC. Shows the range of fair values, margin of safety, and the growth rate the current price implies.
+  </div>
+  <div class="prog" id="dcf-prog">
+    <div class="ph"><span class="blink" id="dcf-plbl">Valuing...</span><span id="dcf-ppct">0%</span></div>
+    <div class="pb"><div class="pf" id="dcf-pf"></div></div>
+    <div class="pl" id="dcf-pl"></div>
+  </div>
+  <div class="stats" id="dcf-stats" style="display:none">
+    <div class="stat"><div class="stat-l">Valued</div><div class="stat-v b" id="ds-n">0</div></div>
+    <div class="stat"><div class="stat-l">Undervalued</div><div class="stat-v g" id="ds-uv">0</div></div>
+    <div class="stat"><div class="stat-l">Fair</div><div class="stat-v a" id="ds-fv">0</div></div>
+    <div class="stat"><div class="stat-l">Overvalued</div><div class="stat-v r" id="ds-ov">0</div></div>
+    <div class="stat"><div class="stat-l">Biggest bargain</div><div class="stat-v g" id="ds-best">—</div></div>
+  </div>
+  <div id="dcf-detail" class="scroll"></div>
+  <div class="tw" id="dcf-tw">
+    <div class="empty">
+      <div class="empty-icon">$</div>
+      <div class="empty-t">Pick a watchlist and press Value Scan</div>
+      <div class="empty-s">Computes intrinsic value via 2-stage DCF + Monte Carlo, compares to price, shows margin of safety and implied growth. Only works for companies with positive free cash flow.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ MONTE CARLO / RISK SIMULATOR ══════════════ -->
+<div class="pane" id="p-montecarlo">
+  <div class="scroll">
+  <div class="mc-body">
+    <div class="mc-hero">
+      <div class="mc-hero-t">What could happen to my $1,000?</div>
+      <div class="mc-hero-s">This simulator runs 1,000 imaginary futures of your trading strategy. It shows you the range of realistic outcomes — from best case to worst case — so you know what you're getting into before risking real money.</div>
+      <div class="mc-controls">
+        <div class="mc-ctrl">
+          <div class="mc-ctrl-l">Win rate (how often you make money)</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="mc-wr" min="40" max="80" value="60" step="1" oninput="document.getElementById('mc-wr-v').textContent=this.value+'%';runMC()">
+            <span class="rv" id="mc-wr-v">60%</span>
+          </div>
+        </div>
+        <div class="mc-ctrl">
+          <div class="mc-ctrl-l">Reward vs risk (how much you gain vs lose)</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="mc-rr" min="10" max="40" value="20" step="1" oninput="document.getElementById('mc-rr-v').textContent=(this.value/10).toFixed(1)+'x';runMC()">
+            <span class="rv" id="mc-rr-v">2.0x</span>
+          </div>
+        </div>
+        <div class="mc-ctrl">
+          <div class="mc-ctrl-l">Number of trades</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="mc-nt" min="10" max="200" value="52" step="2" oninput="document.getElementById('mc-nt-v').textContent=this.value;runMC()">
+            <span class="rv" id="mc-nt-v">52</span>
+          </div>
+        </div>
+        <div class="mc-ctrl">
+          <div class="mc-ctrl-l">% of capital per trade (risk)</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="mc-risk" min="5" max="50" value="25" step="5" oninput="document.getElementById('mc-risk-v').textContent=(this.value/10).toFixed(1)+'%';runMC()">
+            <span class="rv" id="mc-risk-v">2.5%</span>
+          </div>
+        </div>
+        <div class="mc-ctrl">
+          <div class="mc-ctrl-l">Starting capital</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="mc-cap" min="200" max="5000" value="1000" step="100" oninput="document.getElementById('mc-cap-v').textContent='$'+this.value;runMC()">
+            <span class="rv" id="mc-cap-v">$1000</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mc-grid">
+      <div class="mc-chart-wrap">
+        <div style="font-size:11px;color:var(--tx3);margin-bottom:6px">25 sample equity paths</div>
+        <canvas id="mc-cv" height="180"></canvas>
+      </div>
+      <div class="mc-interp" id="mc-interp"></div>
+    </div>
+    <div class="mc-outcomes" id="mc-outs"></div>
+  </div>
+  </div>
+</div>
+
+<!-- ══════════════ PAIRS / CORRELATION ══════════════ -->
+<div class="pane" id="p-correlation">
+  <div class="strip">
+    <div style="font-size:12px;color:var(--tx2)">Shows which stocks move together (high correlation = same bet twice). Also finds pairs where one is unusually cheap vs the other.</div>
+    <button class="btn btn-blue" onclick="loadCorr()">Compute Pairs</button>
+  </div>
+  <div class="bnr" id="corr-bnr"></div>
+  <div class="scroll corr-body" id="corr-body">
+    <div class="empty">
+      <div class="empty-icon">◎</div>
+      <div class="empty-t">Run Scanner first, then click Compute Pairs</div>
+      <div class="empty-s">Finds which of your stocks are too correlated (don't hold both — it's the same bet) and which pairs have diverged enough to trade the spread.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ JOURNAL ══════════════ -->
+<div class="pane" id="p-journal">
+  <div class="scroll">
+  <div class="j-body">
+    <div class="j-warning" id="j-warn"></div>
+    <div class="j-stats" id="j-stats"></div>
+    <div class="j-form-wrap">
+      <div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:10px">Log a new trade</div>
+      <div class="j-form">
+        <div class="fg"><div class="fl">Ticker</div><input type="text" id="jt-tk" placeholder="META" style="width:70px;text-transform:uppercase"></div>
+        <div class="fg"><div class="fl">Direction</div><select id="jt-dir"><option>LONG</option><option>SHORT</option></select></div>
+        <div class="fg"><div class="fl">Entry $</div><input type="number" id="jt-en" placeholder="0.00" step="0.01"></div>
+        <div class="fg"><div class="fl">Stop $</div><input type="number" id="jt-st" placeholder="0.00" step="0.01"></div>
+        <div class="fg"><div class="fl">Target $</div><input type="number" id="jt-tg" placeholder="0.00" step="0.01"></div>
+        <div class="fg"><div class="fl">Size (USD)</div><input type="number" id="jt-sz" placeholder="100" style="width:80px"></div>
+        <div class="fg"><div class="fl">Predicted win%</div><input type="number" id="jt-wp" placeholder="65" style="width:65px"></div>
+        <div class="fg"><div class="fl">Notes</div><input type="text" id="jt-notes" placeholder="Optional" style="width:150px"></div>
+        <div class="fg" style="justify-content:flex-end"><div class="fl">&nbsp;</div><button class="btn btn-scan" onclick="logTrade()">+ Log Trade</button></div>
+      </div>
+    </div>
+    <div class="j-tw" id="j-tw">
+      <div class="empty"><div class="empty-icon">◎</div><div class="empty-t">No trades yet</div><div class="empty-s">Log your trades to track your actual win rate vs what the scanner predicted. This is how you know if the strategy is really working.</div></div>
+    </div>
+  </div>
+  </div>
+</div>
+
+</div><!-- body -->
+</div><!-- app -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+'use strict';
+// ── state ────────────────────────────────────────────────────────────────────
+var allR=[], sortS={col:'winRate',dir:-1}, actF='all';
+var dcfR=[], dcfSortS={col:'mosMed',dir:-1};
+var mcChart=null, gaTimer=null, gaPolling=false, bestChr=null;
+var mlMode='mr';
+var wlData={yours:[],top50vol:[],sp500:[]};
+
+// ── boot ─────────────────────────────────────────────────────────────────────
+(function init(){
+  fetch('/api/watchlists').then(function(r){return r.json();}).then(function(d){
+    wlData=d;
+  }).catch(function(){});
+  document.getElementById('wl-sel').addEventListener('change',function(){
+    document.getElementById('custom-wrap').style.display=this.value==='custom'?'flex':'none';
+  });
+  document.getElementById('dcf-wl-sel').addEventListener('change',function(){
+    document.getElementById('dcf-custom-wrap').style.display=this.value==='custom'?'flex':'none';
+  });
+  setTimeout(runMC,300);
+})();
+
+// ── navigation ────────────────────────────────────────────────────────────────
+function go(name,btn){
+  document.querySelectorAll('.pane').forEach(function(p){p.classList.remove('on');});
+  document.querySelectorAll('.tab').forEach(function(b){b.classList.remove('on');});
+  document.getElementById('p-'+name).classList.add('on');
+  btn.classList.add('on');
+  if(name==='journal') loadJournal();
+  if(name==='montecarlo') setTimeout(runMC,100);
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function sp(n,d){ return n!=null?parseFloat(n).toFixed(d!=null?d:2):'—'; }
+function showBnr(msg,type){ var b=document.getElementById('bnr'); b.textContent=msg; b.className='bnr show '+type; }
+function cx(cond,a,b){ return cond?a:(b||''); }
+
+// ── get tickers ────────────────────────────────────────────────────────────────
+function getTickers(){
+  var v=document.getElementById('wl-sel').value;
+  if(v==='custom') return document.getElementById('custom-in').value.split(',').map(function(t){return t.trim().toUpperCase();}).filter(Boolean);
+  return wlData[v]||[];
+}
+
+// ── SCANNER ───────────────────────────────────────────────────────────────────
+async function startScan(){
+  var tickers=getTickers();
+  if(!tickers.length){showBnr('No tickers selected. Choose a watchlist first.','warn');return;}
+  document.getElementById('scan-btn').disabled=true;
+  document.getElementById('scan-btn').textContent='Scanning...';
+  document.getElementById('prog').classList.add('show');
+  document.getElementById('stats').style.display='none';
+  document.getElementById('filters').style.display='none';
+  document.getElementById('detail').classList.remove('show');
+  document.getElementById('bnr').classList.remove('show');
+  document.getElementById('ls').textContent='● Scanning';
+  document.getElementById('ls').style.color='var(--am)';
+  allR=[];
+  var bsz=10;
+  for(var i=0;i<tickers.length;i+=bsz){
+    var batch=tickers.slice(i,i+bsz);
+    var pct=Math.round(Math.min(i+bsz,tickers.length)/tickers.length*100);
+    document.getElementById('pf').style.width=pct+'%';
+    document.getElementById('ppct').textContent=pct+'%';
+    document.getElementById('plbl').textContent='Scanning '+batch.join(', ')+'...';
+    document.getElementById('pl').textContent='Fetching live prices...';
+    try{
+      var dcfOn=document.getElementById('scan-dcf').value;
+      var url='/api/scan?tickers='+batch.join(',')+'&rsiP=14&bbStd=2.0&zWin=20&volMin=1.0&dcf='+dcfOn;
+      var resp=await fetch(url);
+      var d=await resp.json();
+      if(d.results) allR=allR.concat(d.results);
+    }catch(e){
+      showBnr('Server error: '+e.message+' — Is server.py running?','err');
+      break;
+    }
+  }
+  document.getElementById('prog').classList.remove('show');
+  document.getElementById('scan-btn').disabled=false;
+  document.getElementById('scan-btn').textContent='▶ Rescan';
+  document.getElementById('ls').textContent='● Live';
+  document.getElementById('ls').style.color='var(--gr)';
+  document.getElementById('ts').textContent='Updated '+new Date().toLocaleTimeString();
+  if(!allR.length){
+    showBnr('No results. Make sure server.py is running: python server.py','err');
+    return;
+  }
+  updateStats(); renderTable();
+  document.getElementById('stats').style.display='flex';
+  document.getElementById('filters').style.display='flex';
+}
+
+function updateStats(){
+  var buys=allR.filter(function(r){return r.sig==='strong-buy'||r.sig==='buy';});
+  var sells=allR.filter(function(r){return r.sig==='strong-sell'||r.sig==='sell';});
+  var bwr=allR.reduce(function(a,b){return b.winRate>(a?a.winRate:0)?b:a;},null);
+  var ash=allR.length?(allR.reduce(function(a,b){return a+(b.sharpe||0);},0)/allR.length).toFixed(2):'—';
+  document.getElementById('st-n').textContent=allR.length;
+  document.getElementById('st-buy').textContent=buys.length;
+  document.getElementById('st-sell').textContent=sells.length;
+  document.getElementById('st-bwr').textContent=bwr&&bwr.winRate?bwr.winRate+'%':'—';
+  document.getElementById('st-bp').textContent=bwr?bwr.ticker:'—';
+  document.getElementById('st-sh').textContent=ash;
+}
+
+function filterTab(type,btn){
+  actF=type;
+  document.querySelectorAll('.fp').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+  renderTable();
+}
+
+function sigBadge(sig){
+  var map={'strong-buy':'<span class="sbdg sb">● Strong Buy</span>',
+           'buy':'<span class="sbdg b_">▲ Buy</span>',
+           'strong-sell':'<span class="sbdg ss">● Strong Sell</span>',
+           'sell':'<span class="sbdg s_">▼ Sell</span>',
+           'neutral':'<span class="sbdg nn">— Wait</span>'};
+  return map[sig]||'';
+}
+
+function regStr(r){
+  if(r==='strong_up') return '↑ Strong trend up';
+  if(r==='strong_down') return '↓ Strong drop';
+  if(r==='weak_up') return '↗ Mild up';
+  if(r==='weak_down') return '↙ Softening';
+  return '↔ Ranging';
+}
+
+function renderTable(){
+  var d=allR.slice();
+  var sf=document.getElementById('sig-filter').value;
+  var mwr=parseInt(document.getElementById('min-wr').value)||0;
+  if(actF!=='all') d=d.filter(function(r){return r.sig===actF;});
+  if(sf==='buy') d=d.filter(function(r){return r.sig==='strong-buy'||r.sig==='buy';});
+  if(sf==='sell') d=d.filter(function(r){return r.sig==='strong-sell'||r.sig==='sell';});
+  if(sf==='action') d=d.filter(function(r){return r.sig!=='neutral';});
+  if(mwr>0) d=d.filter(function(r){return r.sig==='neutral'||r.winRate>=mwr;});
+  var col=sortS.col; var dir=sortS.dir;
+  d.sort(function(a,b){
+    var av,bv;
+    if(col==='dcfSig'){ av=a.dcf&&a.dcf.sig?a.dcf.sig:'zzz'; bv=b.dcf&&b.dcf.sig?b.dcf.sig:'zzz'; return av>bv?dir:av<bv?-dir:0; }
+    if(col==='dcfMos'){ av=a.dcf&&a.dcf.mosCons!=null?a.dcf.mosCons:-999; bv=b.dcf&&b.dcf.mosCons!=null?b.dcf.mosCons:-999; return (av-bv)*dir; }
+    av=parseFloat(a[col])||0; bv=parseFloat(b[col])||0;
+    return (av-bv)*dir;
+  });
+  var tw=document.getElementById('tw');
+  if(!d.length){
+    tw.innerHTML='<div class="empty"><div class="empty-icon">◉</div><div class="empty-t">No results for this filter</div><div class="empty-s">Try changing the filter or lowering the minimum win rate.</div></div>';
+    return;
+  }
+  var cols=[
+    {k:'ticker',l:'Stock'},{k:'sig',l:'Signal'},{k:'cur',l:'Price'},
+    {k:'winRate',l:'Win% (OOS)'},{k:'regimeWR',l:'Regime WR%'},
+    {k:'avgRet',l:'Avg Return'},{k:'sharpe',l:'Sharpe'},
+    {k:'halfLife',l:'Snaps back in'},{k:'regime',l:'Market state'},
+    {k:'signalAge',l:'Signal age'},{k:'volRatio',l:'Volume'},
+    {k:'entry',l:'Entry $'},{k:'stop',l:'Stop $'},{k:'t1',l:'Target $'},
+    {k:'rr',l:'R:R'},{k:'nearEarnings',l:'Earnings?'},
+    {k:'shortPctFloat',l:'Short %'},{k:'insiderNetCount',l:'Insiders'},
+    {k:'dcfSig',l:'DCF'},{k:'dcfMos',l:'MoS %'},
+    {k:'hasProfile',l:'ML tuned'}
+  ];
+  var h='<table><thead><tr>';
+  cols.forEach(function(c){
+    h+='<th class="'+(sortS.col===c.k?'srt':'')+'" onclick="sortBy(\''+c.k+'\')">'+c.l+(sortS.col===c.k?(sortS.dir<0?' ↓':' ↑'):'')+'</th>';
+  });
+  h+='</tr></thead><tbody>';
+  d.forEach(function(r){
+    var wc=r.winRate>=68?'color:var(--gr);font-weight:600':r.winRate>=58?'color:var(--am)':'color:var(--rd)';
+    var arc=r.avgRet>0?'color:var(--gr)':'color:var(--rd)';
+    var hlVal=r.halfLife?r.halfLife+'d':'—';
+    var hlc=r.halfLife&&r.halfLife<=20?'color:var(--gr);font-weight:600':r.halfLife&&r.halfLife<=35?'color:var(--am)':'color:var(--rd)';
+    var agec=r.signalAge<=2?'color:var(--gr)':'color:var(--am)';
+    var vc=(r.volRatio||0)>=1.5?'color:var(--gr)':(r.volRatio||0)<0.8?'color:var(--rd)':'color:var(--tx2)';
+    var earn=r.nearEarnings?'<span style="color:var(--am)">⚠ Yes</span>':'—';
+    var prof=r.hasProfile?'<span style="color:var(--pu)">✓</span>':'—';
+    var prc=r.cur>(r.ma20||0)?'color:var(--gr)':'color:var(--rd)';
+    var shc=(r.sharpe||0)>=1?'color:var(--gr)':(r.sharpe||0)>=0.5?'color:var(--am)':'color:var(--rd)';
+    h+='<tr onclick="showDetail(\''+r.ticker+'\')">';
+    h+='<td><strong style="font-size:12px">'+esc(r.ticker)+'</strong><div style="font-size:10px;color:var(--tx3)">'+esc(r.name)+'</div></td>';
+    h+='<td>'+sigBadge(r.sig)+'</td>';
+    h+='<td style="'+prc+'">$'+sp(r.cur)+'</td>';
+    h+='<td style="'+wc+'">'+r.winRate+'%</td>';
+    // Regime-conditional win rate
+    var rwC='color:var(--tx3)'; var rwV='—';
+    if(r.regimeWR!=null){
+      rwC=r.regimeWR>=65?'color:var(--gr);font-weight:600':r.regimeWR>=50?'color:var(--am)':'color:var(--rd)';
+      rwV=r.regimeWR+'% <span style="font-size:9px;color:var(--tx3)">(n='+(r.regimeN||0)+')</span>';
+    }
+    h+='<td style="'+rwC+'">'+rwV+'</td>';
+    h+='<td style="'+arc+'">'+(r.avgRet>0?'+':'')+sp(r.avgRet)+'%</td>';
+    h+='<td style="'+shc+'">'+sp(r.sharpe)+'</td>';
+    h+='<td style="'+hlc+'">'+hlVal+'</td>';
+    h+='<td style="font-size:10px;color:var(--tx2)">'+esc(regStr(r.regime))+'</td>';
+    h+='<td style="'+agec+'">Day '+r.signalAge+'</td>';
+    h+='<td style="'+vc+'">'+(r.volRatio?sp(r.volRatio,1)+'x':'—')+'</td>';
+    h+='<td style="color:var(--bl)">$'+sp(r.entry)+'</td>';
+    h+='<td style="color:var(--rd)">$'+sp(r.stop)+'</td>';
+    h+='<td style="color:var(--gr)">$'+sp(r.t1)+'</td>';
+    h+='<td style="color:'+(r.rr>=2?'var(--gr)':'var(--am)')+'">'+sp(r.rr,1)+':1</td>';
+    h+='<td>'+earn+'</td>';
+    // Short interest cell
+    var shortCell='—';
+    if(r.shortPctFloat!=null){
+      var sp2=r.shortPctFloat*100;
+      var sColor=sp2>=20?'color:var(--rd);font-weight:600':sp2>=10?'color:var(--am)':'color:var(--tx2)';
+      shortCell='<span style="'+sColor+'">'+sp2.toFixed(0)+'%</span>';
+    }
+    h+='<td>'+shortCell+'</td>';
+    // Insider cell
+    var insCell='—';
+    if(r.insiderNetCount!=null){
+      var iN=r.insiderNetCount;
+      if(iN>=3){ insCell='<span style="color:var(--gr);font-weight:600">▲ +'+iN+'</span>'; }
+      else if(iN>=1){ insCell='<span style="color:var(--gr)">+'+iN+'</span>'; }
+      else if(iN<=-3){ insCell='<span style="color:var(--rd)">▼ '+iN+'</span>'; }
+      else if(iN<=-1){ insCell='<span style="color:var(--rd)">'+iN+'</span>'; }
+      else { insCell='<span style="color:var(--tx3)">0</span>'; }
+    }
+    h+='<td>'+insCell+'</td>';
+    var dcfCell='—'; var mosCell='—';
+    if(r.dcf && r.dcf.ok){
+      dcfCell=sigBadge(r.dcf.sig);
+      if(r.dcf.mosCons!=null){
+        var mColor=r.dcf.mosCons>=20?'color:var(--gr);font-weight:600':r.dcf.mosCons>=0?'color:var(--am)':'color:var(--rd)';
+        mosCell='<span style="'+mColor+'">'+(r.dcf.mosCons>0?'+':'')+sp(r.dcf.mosCons,0)+'%</span>';
+      }
+    } else if(r.dcf){
+      dcfCell='<span class="sbdg nn">n/a</span>';
+    }
+    h+='<td>'+dcfCell+'</td>';
+    h+='<td>'+mosCell+'</td>';
+    h+='<td>'+prof+'</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  tw.innerHTML=h;
+}
+
+function sortBy(col){
+  if(sortS.col===col) sortS.dir*=-1; else {sortS.col=col;sortS.dir=-1;}
+  renderTable();
+}
+
+function showDetail(ticker){
+  var r=allR.find(function(x){return x.ticker===ticker;});
+  if(!r) return;
+  var risk=Math.abs(r.entry-r.stop);
+  var rew=Math.abs(r.t1-r.entry);
+  var ev=r.ev||(r.winRate/100*rew-(1-r.winRate/100)*risk);
+  var W=r.winRate/100;
+  var qkPct=Math.max(0,(W-(1-W)/Math.max(r.rr,.01))*25);
+  var deploy=(qkPct*10).toFixed(0);
+  var shares=(deploy/r.entry).toFixed(4);
+  var maxLoss=(parseFloat(deploy)*r.riskPct/100).toFixed(2);
+  var isBuy=r.sig==='strong-buy'||r.sig==='buy';
+  var hlNote=r.halfLife
+    ?(r.halfLife<=15?'This stock typically snaps back in about '+r.halfLife+' days — great for short-term trading.'
+      :r.halfLife<=30?'Typically takes ~'+r.halfLife+' days to snap back. Plan for a 1–3 week hold.'
+      :'Takes ~'+r.halfLife+' days to revert. Consider if this fits your timeframe.')
+    :'No reliable snap-back pattern found. Trade with extra caution.';
+  var hlColor=r.halfLife&&r.halfLife<=20?'var(--gr)':r.halfLife&&r.halfLife<=35?'var(--am)':'var(--rd)';
+  var evColor=ev>0?'var(--gr)':'var(--rd)';
+  var wrColor=r.winRate>=65?'var(--gr)':r.winRate>=55?'var(--am)':'var(--rd)';
+  var shColor=(r.sharpe||0)>=1?'var(--gr)':(r.sharpe||0)>=0.5?'var(--am)':'var(--rd)';
+  var ddColor=r.maxDD>30?'var(--rd)':r.maxDD>15?'var(--am)':'var(--gr)';
+  var dirLabel=r.direction==='LONG'?'BUY (going long)':'SELL SHORT (going short)';
+  var dirColor=r.direction==='LONG'?'var(--gr)':'var(--rd)';
+  var rrColor=r.rr>=2?'var(--gr)':'var(--am)';
+  var rrNote=r.rr>=2?'✓ Good':'⚠ Low — consider skipping';
+  var ageColor=r.signalAge<=2?'var(--gr)':'var(--am)';
+  var ageNote=r.signalAge===1?'(fresh — best odds)':r.signalAge<=3?'(still good)':'(getting stale)';
+  var dayNote=['Mon','Fri'].indexOf(r.dow)>=0?'(slightly weaker day)':'';
+  var plainClass=isBuy?'':r.sig==='neutral'?'wait':'sell';
+  var reasons='';
+  if(r.reasons&&r.reasons.length){
+    r.reasons.forEach(function(rs){
+      var cls=rs.indexOf('⚠')>=0?' neg':'';
+      reasons+='<div class="reason'+cls+'">'+esc(rs)+'</div>';
+    });
+  } else {
+    reasons='<div style="color:var(--tx3)">No reasons recorded</div>';
+  }
+  var d=document.getElementById('detail');
+  var earn=r.nearEarnings?'<span style="color:var(--am);font-size:11px;margin-left:8px">⚠ Earnings in '+r.earningsDays+' days</span>':'';
+  var prof=r.hasProfile?'<span style="color:var(--pu);font-size:11px;margin-left:8px">ML tuned</span>':'';
+  var h='<div class="d-inner">';
+  h+='<div class="d-head">';
+  h+='<div><div class="d-tk">'+esc(r.ticker)+' '+sigBadge(r.sig)+earn+prof+'</div>';
+  h+='<div class="d-nm">'+esc(r.name)+'</div></div>';
+  h+='<div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap">';
+  h+='<button class="btn btn-blue btn-sm" onclick="prefillJournal(\''+r.ticker+'\',\''+r.direction+'\','+r.entry+','+r.stop+','+r.t1+','+r.winRate+')">Log this trade</button>';
+  h+='<button class="xbtn" onclick="document.getElementById(\'detail\').classList.remove(\'show\')">✕</button>';
+  h+='</div></div>';
+  h+='<div class="d-plain '+plainClass+'">'+esc(r.plain)+'</div>';
+  h+='<div class="d-grid">';
+  h+='<div class="d-card"><div class="d-cl">Historical win rate</div><div class="d-cv" style="color:'+wrColor+'">'+r.winRate+'%</div><div class="d-cs">Out of '+r.trades+' similar setups in this stock\'s own history (walk-forward, honest)</div></div>';
+  h+='<div class="d-card"><div class="d-cl">Average return per trade</div><div class="d-cv" style="color:'+(r.avgRet>0?'var(--gr)':'var(--rd)')+'">'+(r.avgRet>0?'+':'')+sp(r.avgRet)+'%</div><div class="d-cs">Mean % gain across backtested trades</div></div>';
+  h+='<div class="d-card"><div class="d-cl">Expected gain per trade</div><div class="d-cv" style="color:'+evColor+'">'+(ev>0?'+':'')+'$'+ev.toFixed(2)+'</div><div class="d-cs">Positive = this trade has a mathematical edge</div></div>';
+  h+='<div class="d-card"><div class="d-cl">Snap-back speed</div><div class="d-cv" style="color:'+hlColor+'">'+(r.halfLife?r.halfLife+'d':'—')+'</div><div class="d-cs">'+hlNote+'</div></div>';
+  h+='<div class="d-card"><div class="d-cl">Sharpe ratio</div><div class="d-cv" style="color:'+shColor+'">'+sp(r.sharpe)+'</div><div class="d-cs">1.0+ means the gains are worth the risk taken</div></div>';
+  h+='<div class="d-card"><div class="d-cl">Worst losing run</div><div class="d-cv" style="color:'+ddColor+'">'+sp(r.maxDD)+'%</div><div class="d-cs">Worst drawdown in backtest — can you hold through this?</div></div>';
+  // Fold stability (purged CV)
+  if(r.medianFoldWR!=null){
+    var fsColor=(r.foldSpread||0)<=20?'var(--gr)':(r.foldSpread||0)<=35?'var(--am)':'var(--rd)';
+    h+='<div class="d-card"><div class="d-cl">OOS median fold win rate</div><div class="d-cv" style="color:'+fsColor+'">'+sp(r.medianFoldWR,0)+'%</div><div class="d-cs">Median across purged walk-forward folds. Spread between best/worst fold: '+sp(r.foldSpread||0,0)+'pp — '+((r.foldSpread||0)<=20?'stable':'unstable')+'</div></div>';
+  }
+  // Regime-conditional
+  if(r.regimeWR!=null){
+    var rwC2=r.regimeWR>=65?'var(--gr)':r.regimeWR>=50?'var(--am)':'var(--rd)';
+    h+='<div class="d-card"><div class="d-cl">Regime-conditional WR</div><div class="d-cv" style="color:'+rwC2+'">'+r.regimeWR+'%</div><div class="d-cs">Win rate of this direction in this specific market regime ('+r.regimeN+' historical trades). More honest than blended.</div></div>';
+  }
+  // Short interest card
+  if(r.shortPctFloat!=null){
+    var spf=r.shortPctFloat*100;
+    var shortC=spf>=20?'var(--rd)':spf>=10?'var(--am)':'var(--tx2)';
+    var shortNote=spf>=20?'High — squeeze risk, shorts heavily discounted':spf>=10?'Elevated — caution on shorts':'Normal level';
+    h+='<div class="d-card"><div class="d-cl">Short interest (% of float)</div><div class="d-cv" style="color:'+shortC+'">'+spf.toFixed(1)+'%</div><div class="d-cs">'+shortNote+(r.shortRatio?' · Days to cover: '+sp(r.shortRatio,1):'')+'</div></div>';
+  }
+  // Insider card
+  if(r.insiderNetCount!=null){
+    var iN2=r.insiderNetCount;
+    var iC=iN2>=1?'var(--gr)':iN2<=-1?'var(--rd)':'var(--tx3)';
+    var iSign=iN2>0?'+':'';
+    var iNote=iN2>=3?'Insiders buying net — strong value signal (Form 4)':iN2>=1?'Mild net insider buying':iN2<=-3?'Heavy net insider selling (note: often vesting/noise)':iN2<=-1?'Mild net insider selling':'No net insider flow';
+    h+='<div class="d-card"><div class="d-cl">Insider activity (6mo)</div><div class="d-cv" style="color:'+iC+'">'+iSign+iN2+' txns</div><div class="d-cs">'+iNote+'</div></div>';
+  }
+  // Kalman z-score (adaptive mean)
+  if(r.zKalman!=null){
+    var zkC=Math.abs(r.zKalman)>=1.5?'var(--gr)':Math.abs(r.zKalman)>=0.8?'var(--am)':'var(--tx2)';
+    var zkNote='Adaptive mean from Kalman filter — tracks regime shifts in real time. ';
+    if(Math.abs(r.z-r.zKalman)>1.2){ zkNote+='⚠ Disagrees with rolling z — likely regime change, not overshoot'; }
+    else { zkNote+='Agrees with rolling z — genuine dislocation'; }
+    h+='<div class="d-card"><div class="d-cl">Kalman z-score (adaptive)</div><div class="d-cv" style="color:'+zkC+'">'+(r.zKalman>0?'+':'')+r.zKalman+'σ</div><div class="d-cs">'+zkNote+'</div></div>';
+  }
+  // Sector relative strength
+  if(r.sectorZ!=null){
+    var szC=r.sectorZ>=1?'var(--gr)':r.sectorZ<=-1?'var(--rd)':'var(--tx2)';
+    var szNote='';
+    if(r.sectorZ>=1) szNote='Leader — outperforming '+esc(r.sectorETF||'sector')+' more than usual. Oversold leaders revert fastest.';
+    else if(r.sectorZ<=-1.5) szNote='Broken — heavy underperformance vs '+esc(r.sectorETF||'sector')+'. Be careful with longs here.';
+    else if(r.sectorZ<=-1) szNote='Trailing '+esc(r.sectorETF||'sector')+'. Confluence for shorts, headwind for longs.';
+    else szNote='Roughly in line with '+esc(r.sectorETF||'sector');
+    h+='<div class="d-card"><div class="d-cl">Sector-relative strength</div><div class="d-cv" style="color:'+szC+'">'+(r.sectorZ>0?'+':'')+r.sectorZ+'σ</div><div class="d-cs">'+szNote+'</div></div>';
+  }
+  // Execution cost
+  if(r.execCostBps){
+    var ecC=r.execCostBps<=15?'var(--gr)':r.execCostBps<=40?'var(--am)':'var(--rd)';
+    var ecNote=r.execCostBps<=15?'Liquid — minimal slippage':r.execCostBps<=40?'Moderate — costs meaningfully eat into edge':'Illiquid — costs may kill the edge';
+    h+='<div class="d-card"><div class="d-cl">Execution cost (round-trip)</div><div class="d-cv" style="color:'+ecC+'">'+r.execCostBps+' bps</div><div class="d-cs">'+ecNote+' (already subtracted from backtest returns)</div></div>';
+  }
+  // IV premium
+  if(r.ivPremium!=null){
+    var ivC=r.ivPremium>=0.5?'var(--pu)':r.ivPremium>=0.2?'var(--am)':'var(--tx2)';
+    var ivNote=r.ivPremium>=0.5?'IV richly priced vs realized vol — options premium strategies attractive':r.ivPremium>=0.2?'IV moderately elevated':'IV roughly tracking realized vol';
+    h+='<div class="d-card"><div class="d-cl">IV premium (ATM / realized)</div><div class="d-cv" style="color:'+ivC+'">'+(r.ivPremium>=0?'+':'')+(r.ivPremium*100).toFixed(0)+'%</div><div class="d-cs">'+ivNote+' · ATM IV '+((r.ivATM||0)*100).toFixed(0)+'% · RV30 '+((r.rv30||0)*100).toFixed(0)+'%</div></div>';
+  }
+  // Calibration (journal-tuned Kelly)
+  if(r.calibN && r.calibN>=5){
+    var cfC=r.calibFactor>=1?'var(--gr)':r.calibFactor>=0.7?'var(--am)':'var(--rd)';
+    var cfNote=r.calibFactor>=1?'Model conservative — real WR ≥ predicted':r.calibFactor>=0.7?'Model slightly overconfident':'Model overconfident — sizing compressed heavily';
+    h+='<div class="d-card"><div class="d-cl">Journal-calibrated Kelly</div><div class="d-cv" style="color:'+cfC+'">'+r.calibFactor.toFixed(2)+'x</div><div class="d-cs">'+cfNote+' (n='+r.calibN+' closed trades)</div></div>';
+  }
+  h+='</div>';
+  h+='<div class="d-plans">';
+  h+='<div class="d-plan"><div class="d-plan-t">Your trade plan</div>';
+  h+='<div class="d-row"><span class="dk">Direction</span><span class="dv" style="color:'+dirColor+'">● '+dirLabel+'</span></div>';
+  h+='<div class="d-row"><span class="dk">Enter at</span><span class="dv" style="color:var(--bl)">$'+sp(r.entry)+'</span></div>';
+  h+='<div class="d-row"><span class="dk">Stop loss</span><span class="dv" style="color:var(--rd)">$'+sp(r.stop)+' (−'+r.riskPct+'%) — exit if price goes here</span></div>';
+  h+='<div class="d-row"><span class="dk">Target 1</span><span class="dv" style="color:var(--gr)">$'+sp(r.t1)+' (+'+r.rewPct+'%) — sell half, move stop to entry price</span></div>';
+  h+='<div class="d-row"><span class="dk">Target 2</span><span class="dv" style="color:var(--cy)">$'+sp(r.t2)+' — sell remaining position</span></div>';
+  h+='<div class="d-row"><span class="dk">Risk / Reward</span><span class="dv" style="color:'+rrColor+'">'+sp(r.rr,1)+':1 '+rrNote+'</span></div>';
+  h+='</div>';
+  h+='<div class="d-plan"><div class="d-plan-t">How much to invest (¼ Kelly sizing)</div>';
+  h+='<div class="d-row"><span class="dk">Deploy</span><span class="dv" style="color:var(--am)">$'+deploy+' of your $1,000</span></div>';
+  h+='<div class="d-row"><span class="dk">Fractional shares</span><span class="dv">'+shares+' shares on INDmoney</span></div>';
+  h+='<div class="d-row"><span class="dk">Max loss if stop hit</span><span class="dv" style="color:var(--rd)">$'+maxLoss+'</span></div>';
+  h+='<div class="d-row"><span class="dk">Signal age</span><span class="dv" style="color:'+ageColor+'">Day '+r.signalAge+' '+ageNote+'</span></div>';
+  h+='<div class="d-row"><span class="dk">Market state</span><span class="dv">'+esc(regStr(r.regime))+'</span></div>';
+  h+='<div class="d-row"><span class="dk">Day of week</span><span class="dv">'+(r.dow||'')+(dayNote?' <span style="color:var(--tx3)">'+dayNote+'</span>':'')+'</span></div>';
+  h+='</div></div>';
+  h+='<div class="reasons-box"><strong style="color:var(--tx)">Why this signal fired:</strong><br><br>'+reasons+'</div>';
+  if(r.dcf && r.dcf.ok){
+    var dc=r.dcf;
+    var mColor=dc.mosCons>=20?'var(--gr)':dc.mosCons>=0?'var(--am)':'var(--rd)';
+    var ivSpread=dc.ivP75&&dc.ivP25?'$'+sp(dc.ivP25)+' – $'+sp(dc.ivP75):'—';
+    var ivMed=dc.ivMed?'$'+sp(dc.ivMed):'—';
+    var igRow=dc.impliedGrowth!=null?sp(dc.impliedGrowth*100,1)+'%':'—';
+    var waccRow=dc.wacc!=null?sp(dc.wacc*100,1)+'%':'—';
+    var dcfBlurb=dc.mosCons>=20?'Market price is well below estimated intrinsic value — mathematically cheap.':
+                 dc.mosCons>=0?'Slight discount to intrinsic value — roughly fair.':
+                 dc.mosCons>-20?'Trading above intrinsic value — mild overvaluation.':
+                 'Trading significantly above intrinsic value — rich.';
+    h+='<div style="margin-top:16px;padding:14px;background:var(--bg2);border:1px solid var(--bdr);border-radius:10px">';
+    h+='<div style="font-size:12px;font-weight:600;color:var(--tx);margin-bottom:8px">Value check (DCF)</div>';
+    h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:10px">'+esc(dcfBlurb)+'</div>';
+    h+='<div class="d-grid">';
+    h+='<div class="d-card"><div class="d-cl">Margin of safety (conservative)</div><div class="d-cv" style="color:'+mColor+'">'+(dc.mosCons>0?'+':'')+sp(dc.mosCons,0)+'%</div><div class="d-cs">Upside vs 25th-percentile fair value (the pessimistic end of the Monte Carlo range)</div></div>';
+    h+='<div class="d-card"><div class="d-cl">Median fair value</div><div class="d-cv" style="color:var(--bl)">'+ivMed+'</div><div class="d-cs">Middle of 4,000 Monte Carlo runs</div></div>';
+    h+='<div class="d-card"><div class="d-cl">Fair-value range (P25–P75)</div><div class="d-cv" style="color:var(--cy);font-size:14px">'+ivSpread+'</div><div class="d-cs">Central half of simulated outcomes</div></div>';
+    h+='<div class="d-card"><div class="d-cl">Implied growth (reverse DCF)</div><div class="d-cv" style="color:var(--pu)">'+igRow+'</div><div class="d-cs">FCF growth the current price requires to be fair — compare to history</div></div>';
+    h+='<div class="d-card"><div class="d-cl">WACC used</div><div class="d-cv">'+waccRow+'</div><div class="d-cs">CAPM cost of equity + after-tax cost of debt, weighted</div></div>';
+    h+='<div class="d-card"><div class="d-cl">DCF signal</div><div class="d-cv">'+sigBadge(dc.sig)+'</div><div class="d-cs">'+(dc.hasProfile?'Using ML-tuned DCF params for this ticker':'Using default priors — run ML DCF mode to tune')+'</div></div>';
+    // Earnings quality (Sloan accruals)
+    if(dc.accrualQuality){
+      var aq=dc.accrualQuality;
+      var aqC=aq.flag==='high'?'var(--rd)':aq.flag==='low'?'var(--gr)':'var(--tx2)';
+      var aqNote=aq.flag==='high'?'High accruals — earnings exceed cash flow, quality suspect (Sloan anomaly, DCF signal downgraded)':aq.flag==='low'?'Conservative bookkeeping — cash flow backs earnings':'Normal accrual profile';
+      h+='<div class="d-card"><div class="d-cl">Earnings quality (accruals/'+esc(aq.scale)+')</div><div class="d-cv" style="color:'+aqC+'">'+(aq.ratio>=0?'+':'')+(aq.ratio*100).toFixed(1)+'%</div><div class="d-cs">'+aqNote+' ('+aq.years+'y avg)</div></div>';
+    }
+    h+='</div></div>';
+  }
+  h+='</div>';
+  d.innerHTML=h;
+  d.classList.add('show');
+  document.getElementById('tw').scrollTop=0;
+}
+
+function prefillJournal(tk,dir,en,st,tg,wp){
+  document.getElementById('jt-tk').value=tk;
+  document.getElementById('jt-dir').value=dir;
+  document.getElementById('jt-en').value=en;
+  document.getElementById('jt-st').value=st;
+  document.getElementById('jt-tg').value=tg;
+  document.getElementById('jt-wp').value=wp;
+  go('journal',document.querySelectorAll('.tab')[4]);
+}
+
+function clearAll(){
+  allR=[];
+  document.getElementById('detail').classList.remove('show');
+  document.getElementById('stats').style.display='none';
+  document.getElementById('filters').style.display='none';
+  document.getElementById('bnr').classList.remove('show');
+  document.getElementById('scan-btn').textContent='▶ Scan';
+  document.getElementById('tw').innerHTML='<div class="empty"><div class="empty-icon">◎</div><div class="empty-t">Choose a watchlist and press Scan</div><div class="empty-s">The scanner finds stocks that are unusually far from their average price.</div></div>';
+}
+
+// ── DCF / VALUE ──────────────────────────────────────────────────────────────
+function getDCFTickers(){
+  var v=document.getElementById('dcf-wl-sel').value;
+  if(v==='custom') return document.getElementById('dcf-custom-in').value.split(',').map(function(t){return t.trim().toUpperCase();}).filter(Boolean);
+  return wlData[v]||[];
+}
+
+async function startDCF(){
+  var tickers=getDCFTickers();
+  if(!tickers.length){
+    var b=document.getElementById('dcf-tw');
+    b.innerHTML='<div class="empty"><div class="empty-icon">!</div><div class="empty-t">No tickers selected</div><div class="empty-s">Pick a watchlist first.</div></div>';
+    return;
+  }
+  document.getElementById('dcf-btn').disabled=true;
+  document.getElementById('dcf-btn').textContent='Valuing...';
+  document.getElementById('dcf-prog').classList.add('show');
+  document.getElementById('dcf-stats').style.display='none';
+  document.getElementById('dcf-detail').classList.remove('show');
+  document.getElementById('dcf-detail').innerHTML='';
+  dcfR=[];
+  var bsz=6;
+  for(var i=0;i<tickers.length;i+=bsz){
+    var batch=tickers.slice(i,i+bsz);
+    var pct=Math.round(Math.min(i+bsz,tickers.length)/tickers.length*100);
+    document.getElementById('dcf-pf').style.width=pct+'%';
+    document.getElementById('dcf-ppct').textContent=pct+'%';
+    document.getElementById('dcf-plbl').textContent='Valuing '+batch.join(', ')+'...';
+    document.getElementById('dcf-pl').textContent='Monte Carlo DCF — 4000 sims per stock';
+    try{
+      var resp=await fetch('/api/dcf?tickers='+batch.join(','));
+      var d=await resp.json();
+      if(d.results) dcfR=dcfR.concat(d.results);
+    }catch(e){
+      break;
+    }
+  }
+  document.getElementById('dcf-prog').classList.remove('show');
+  document.getElementById('dcf-btn').disabled=false;
+  document.getElementById('dcf-btn').textContent='▶ Rescan';
+  updateDCFStats(); renderDCFTable();
+  document.getElementById('dcf-stats').style.display='flex';
+}
+
+function updateDCFStats(){
+  var ok=dcfR.filter(function(r){return r.ok;});
+  var uv=ok.filter(function(r){return r.sig==='strong-buy'||r.sig==='buy';});
+  var fv=ok.filter(function(r){return r.sig==='fair';});
+  var ov=ok.filter(function(r){return r.sig==='sell'||r.sig==='strong-sell';});
+  var best=ok.reduce(function(a,b){return (b.mosCons||-999)>((a&&a.mosCons!=null)?a.mosCons:-999)?b:a;},null);
+  document.getElementById('ds-n').textContent=ok.length;
+  document.getElementById('ds-uv').textContent=uv.length;
+  document.getElementById('ds-fv').textContent=fv.length;
+  document.getElementById('ds-ov').textContent=ov.length;
+  document.getElementById('ds-best').textContent=best?best.ticker+' ('+(best.mosCons>0?'+':'')+sp(best.mosCons,0)+'%)':'—';
+}
+
+function renderDCFTable(){
+  var d=dcfR.slice();
+  var sf=document.getElementById('dcf-sig-filter').value;
+  if(sf==='undervalued') d=d.filter(function(r){return r.sig==='strong-buy'||r.sig==='buy';});
+  else if(sf==='overvalued') d=d.filter(function(r){return r.sig==='strong-sell'||r.sig==='sell';});
+  else if(sf==='action') d=d.filter(function(r){return r.ok && r.sig!=='fair';});
+  var col=dcfSortS.col; var dir=dcfSortS.dir;
+  d.sort(function(a,b){
+    var av=a[col]!=null?parseFloat(a[col]):-999;
+    var bv=b[col]!=null?parseFloat(b[col]):-999;
+    if(isNaN(av)) av=-999; if(isNaN(bv)) bv=-999;
+    return (av-bv)*dir;
+  });
+  var tw=document.getElementById('dcf-tw');
+  if(!d.length){
+    tw.innerHTML='<div class="empty"><div class="empty-icon">$</div><div class="empty-t">No results for this filter</div><div class="empty-s">Try switching Show to All.</div></div>';
+    return;
+  }
+  var cols=[
+    {k:'ticker',l:'Stock'},{k:'sig',l:'Signal'},{k:'price',l:'Price'},
+    {k:'ivMed',l:'Fair (median)'},{k:'ivP25',l:'Fair low'},{k:'ivP75',l:'Fair high'},
+    {k:'mosCons',l:'MoS (cons)'},{k:'mosMed',l:'MoS (median)'},
+    {k:'impliedGrowth',l:'Implied g%'},{k:'wacc',l:'WACC %'},
+    {k:'hasProfile',l:'ML tuned'}
+  ];
+  var h='<table><thead><tr>';
+  cols.forEach(function(c){
+    h+='<th class="'+(dcfSortS.col===c.k?'srt':'')+'" onclick="dcfSortBy(\''+c.k+'\')">'+c.l+(dcfSortS.col===c.k?(dcfSortS.dir<0?' ↓':' ↑'):'')+'</th>';
+  });
+  h+='</tr></thead><tbody>';
+  d.forEach(function(r){
+    h+='<tr onclick="showDCFDetail(\''+r.ticker+'\')">';
+    h+='<td><strong style="font-size:12px">'+esc(r.ticker)+'</strong><div style="font-size:10px;color:var(--tx3)">'+esc(r.name||'')+'</div></td>';
+    if(!r.ok){
+      h+='<td colspan="10" style="color:var(--tx3)">'+esc(r.error||r.plain||'Fundamentals unavailable')+'</td></tr>';
+      return;
+    }
+    h+='<td>'+sigBadge(r.sig)+'</td>';
+    h+='<td style="color:var(--tx)">$'+sp(r.price)+'</td>';
+    h+='<td style="color:var(--bl)">$'+sp(r.ivMed)+'</td>';
+    h+='<td style="color:var(--tx2)">$'+sp(r.ivP25)+'</td>';
+    h+='<td style="color:var(--tx2)">$'+sp(r.ivP75)+'</td>';
+    var mColor=r.mosCons>=20?'color:var(--gr);font-weight:600':r.mosCons>=0?'color:var(--am)':'color:var(--rd)';
+    h+='<td style="'+mColor+'">'+(r.mosCons>0?'+':'')+sp(r.mosCons,0)+'%</td>';
+    var mMed=r.mosMed>=20?'color:var(--gr)':r.mosMed>=0?'color:var(--am)':'color:var(--rd)';
+    h+='<td style="'+mMed+'">'+(r.mosMed>0?'+':'')+sp(r.mosMed,0)+'%</td>';
+    var ig=r.impliedGrowth!=null?sp(r.impliedGrowth*100,1)+'%':'—';
+    h+='<td style="color:var(--pu)">'+ig+'</td>';
+    h+='<td>'+(r.wacc!=null?sp(r.wacc*100,1)+'%':'—')+'</td>';
+    h+='<td>'+(r.hasProfile?'<span style="color:var(--pu)">✓</span>':'—')+'</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  tw.innerHTML=h;
+}
+
+function dcfSortBy(col){
+  if(dcfSortS.col===col) dcfSortS.dir*=-1; else {dcfSortS.col=col;dcfSortS.dir=-1;}
+  renderDCFTable();
+}
+
+async function showDCFDetail(ticker){
+  var r=dcfR.find(function(x){return x.ticker===ticker;});
+  if(!r||!r.ok) return;
+  var d=document.getElementById('dcf-detail');
+  d.innerHTML='<div style="padding:20px;color:var(--tx3)">Loading detail + walk-forward backtest...</div>';
+  d.classList.add('show');
+  try{
+    var resp=await fetch('/api/dcf_detail?ticker='+ticker);
+    var j=await resp.json();
+    if(!j.ok){d.innerHTML='<div style="padding:20px;color:var(--rd)">Error: '+esc(j.error||'unknown')+'</div>';return;}
+    var x=j.result;
+    var mColor=x.mosCons>=20?'var(--gr)':x.mosCons>=0?'var(--am)':'var(--rd)';
+    var igHist=x.gPrior!=null?sp(x.gPrior*100,1)+'% (±'+sp((x.gSigma||0)*100,1)+'%)':'—';
+    var ig=x.impliedGrowth!=null?sp(x.impliedGrowth*100,1)+'%':'—';
+    var plainCls=x.sig==='strong-buy'||x.sig==='buy'?'':x.sig==='fair'?'wait':'sell';
+    var reasons='';
+    if(x.reasons&&x.reasons.length){
+      x.reasons.forEach(function(rs){
+        var cls=rs.indexOf('⚠')>=0||rs.indexOf('over')>=0?' neg':'';
+        reasons+='<div class="reason'+cls+'">'+esc(rs)+'</div>';
+      });
+    } else reasons='<div style="color:var(--tx3)">No reasons recorded</div>';
+    var btH='';
+    if(x.backtest && x.backtest.trades>=1){
+      var bt=x.backtest;
+      var wrC=bt.winRate>=60?'var(--gr)':bt.winRate>=50?'var(--am)':'var(--rd)';
+      var spC=bt.spearman>0.2?'var(--gr)':bt.spearman>0?'var(--am)':'var(--rd)';
+      btH='<div class="d-card"><div class="d-cl">Walk-forward win rate</div><div class="d-cv" style="color:'+wrC+'">'+sp(bt.winRate,0)+'%</div><div class="d-cs">'+bt.trades+' historical snapshots — did the DCF signal predict the next-year return?</div></div>';
+      btH+='<div class="d-card"><div class="d-cl">Avg 1-yr return after signal</div><div class="d-cv" style="color:'+(bt.avgReturn>0?'var(--gr)':'var(--rd)')+'">'+(bt.avgReturn>0?'+':'')+sp(bt.avgReturn,1)+'%</div><div class="d-cs">Mean 12-month forward return in prior snapshots</div></div>';
+      btH+='<div class="d-card"><div class="d-cl">Monotonic fit (Spearman)</div><div class="d-cv" style="color:'+spC+'">'+sp(bt.spearman,2)+'</div><div class="d-cs">Higher = bigger margin of safety reliably predicted bigger return</div></div>';
+    } else {
+      btH='<div class="d-card" style="grid-column:span 3"><div class="d-cl">Walk-forward backtest</div><div class="d-cs">Not enough historical FCF snapshots for this ticker (need 3+ years of annual free cash flow). Signal is forward-looking only.</div></div>';
+    }
+    var sensH='';
+    if(x.sensitivity){
+      sensH='<div style="margin-top:14px"><strong style="color:var(--tx);font-size:12px">Sensitivity (IV if we change one input)</strong>';
+      sensH+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;margin-top:6px;font-size:11px">';
+      Object.keys(x.sensitivity).forEach(function(k){
+        var v=x.sensitivity[k];
+        sensH+='<div style="background:var(--bg3);padding:6px 9px;border-radius:6px"><div style="color:var(--tx3);font-size:10px">'+esc(k)+'</div><div style="color:var(--bl);font-family:var(--mono)">$'+sp(v)+'</div></div>';
+      });
+      sensH+='</div></div>';
+    }
+    var h='<div class="d-inner">';
+    h+='<div class="d-head"><div><div class="d-tk">'+esc(x.ticker)+' '+sigBadge(x.sig)+(x.hasProfile?'<span style="color:var(--pu);font-size:11px;margin-left:8px">ML tuned</span>':'')+'</div>';
+    h+='<div class="d-nm">'+esc(x.name||'')+'</div></div>';
+    h+='<button class="xbtn" onclick="document.getElementById(\'dcf-detail\').classList.remove(\'show\')">✕</button></div>';
+    h+='<div class="d-plain '+plainCls+'">'+esc(x.plain||'')+'</div>';
+    h+='<div class="d-grid">';
+    h+='<div class="d-card"><div class="d-cl">Current price</div><div class="d-cv">$'+sp(x.price)+'</div><div class="d-cs">Live market quote</div></div>';
+    h+='<div class="d-card"><div class="d-cl">Median fair value</div><div class="d-cv" style="color:var(--bl)">$'+sp(x.ivMed)+'</div><div class="d-cs">50th percentile of 4,000 Monte Carlo simulations</div></div>';
+    h+='<div class="d-card"><div class="d-cl">Fair range (P25–P75)</div><div class="d-cv" style="color:var(--cy);font-size:14px">$'+sp(x.ivP25)+' – $'+sp(x.ivP75)+'</div><div class="d-cs">Middle half of simulated outcomes — where fair value most likely lies</div></div>';
+    h+='<div class="d-card"><div class="d-cl">Wide range (P5–P95)</div><div class="d-cv" style="color:var(--tx2);font-size:13px">$'+sp(x.ivP5)+' – $'+sp(x.ivP95)+'</div><div class="d-cs">90% interval across simulations</div></div>';
+    h+='<div class="d-card"><div class="d-cl">Margin of safety (conservative)</div><div class="d-cv" style="color:'+mColor+'">'+(x.mosCons>0?'+':'')+sp(x.mosCons,0)+'%</div><div class="d-cs">Upside vs P25 fair value — the pessimistic end</div></div>';
+    h+='<div class="d-card"><div class="d-cl">Margin of safety (median)</div><div class="d-cv">'+(x.mosMed>0?'+':'')+sp(x.mosMed,0)+'%</div><div class="d-cs">Upside vs median fair value</div></div>';
+    h+='<div class="d-card"><div class="d-cl">Implied growth (reverse DCF)</div><div class="d-cv" style="color:var(--pu)">'+ig+'</div><div class="d-cs">Growth baked into today\'s price</div></div>';
+    h+='<div class="d-card"><div class="d-cl">Historical FCF growth</div><div class="d-cv">'+igHist+'</div><div class="d-cs">What the company actually did</div></div>';
+    h+='<div class="d-card"><div class="d-cl">WACC</div><div class="d-cv">'+(x.wacc!=null?sp(x.wacc*100,1)+'%':'—')+'</div><div class="d-cs">CAPM equity + after-tax debt, weighted</div></div>';
+    if(x.accrualQuality){
+      var aq2=x.accrualQuality;
+      var aq2C=aq2.flag==='high'?'var(--rd)':aq2.flag==='low'?'var(--gr)':'var(--tx2)';
+      var aq2N=aq2.flag==='high'?'Accruals > cash flow — earnings quality suspect (Sloan anomaly)':aq2.flag==='low'?'Cash flow backs earnings — conservative bookkeeping':'Normal accrual profile';
+      h+='<div class="d-card"><div class="d-cl">Earnings quality (accruals/'+esc(aq2.scale)+')</div><div class="d-cv" style="color:'+aq2C+'">'+(aq2.ratio>=0?'+':'')+(aq2.ratio*100).toFixed(1)+'%</div><div class="d-cs">'+aq2N+' ('+aq2.years+'y avg)</div></div>';
+    }
+    h+=btH;
+    h+='</div>';
+    h+=sensH;
+    h+='<div class="reasons-box" style="margin-top:14px"><strong style="color:var(--tx)">Why this valuation signal fired:</strong><br><br>'+reasons+'</div>';
+    h+='</div>';
+    d.innerHTML=h;
+  }catch(e){
+    d.innerHTML='<div style="padding:20px;color:var(--rd)">Error loading detail: '+esc(e.message)+'</div>';
+  }
+}
+
+function clearDCF(){
+  dcfR=[];
+  document.getElementById('dcf-detail').classList.remove('show');
+  document.getElementById('dcf-detail').innerHTML='';
+  document.getElementById('dcf-stats').style.display='none';
+  document.getElementById('dcf-btn').textContent='▶ Value Scan';
+  document.getElementById('dcf-tw').innerHTML='<div class="empty"><div class="empty-icon">$</div><div class="empty-t">Pick a watchlist and press Value Scan</div><div class="empty-s">Computes intrinsic value via 2-stage DCF + Monte Carlo.</div></div>';
+}
+
+// ── ML OPTIMIZER ─────────────────────────────────────────────────────────────
+function drawFitChart(data){
+  var cv=document.getElementById('fit-cv');
+  cv.width=cv.offsetWidth||400; cv.height=140;
+  var ctx=cv.getContext('2d'); var W=cv.width; var H=140;
+  ctx.fillStyle='#080b0f'; ctx.fillRect(0,0,W,H);
+  if(!data||!data.length) return;
+  var mn=Math.min.apply(null,data)*.95;
+  var mx=Math.max.apply(null,data)*1.05+.001;
+  var rng=mx-mn;
+  ctx.strokeStyle='#1a2535'; ctx.lineWidth=1;
+  [.25,.5,.75,1].forEach(function(p){var y=H-p*(H-20)-10;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();});
+  ctx.beginPath(); ctx.strokeStyle='#bb88ff'; ctx.lineWidth=2;
+  data.forEach(function(v,i){
+    var x=i/(Math.max(data.length-1,1))*(W-20)+10;
+    var y=H-((v-mn)/rng)*(H-20)-10;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  ctx.fillStyle='#bb88ff'; ctx.font='10px JetBrains Mono,monospace';
+  ctx.fillText('Best fitness: '+data[data.length-1].toFixed(4),8,13);
+}
+
+(function initFitChart(){
+  var cv=document.getElementById('fit-cv');
+  cv.width=400; cv.height=140;
+  var ctx=cv.getContext('2d');
+  ctx.fillStyle='#080b0f'; ctx.fillRect(0,0,400,140);
+})();
+
+function setMLMode(m){
+  mlMode=m;
+  document.getElementById('ml-mode-tag').textContent='['+m.toUpperCase()+']';
+}
+
+function getMLTickers(){
+  var src=document.getElementById('ml-src').value;
+  if(src==='scanner'){
+    if(allR.length) return allR.map(function(r){return r.ticker;});
+    return getTickers();
+  }
+  if(src==='dcf'){
+    if(dcfR.length) return dcfR.map(function(r){return r.ticker;});
+    return getDCFTickers();
+  }
+  return wlData[src]||[];
+}
+
+async function startML(){
+  if(gaPolling) return;
+  var tickers=getMLTickers();
+  if(!tickers.length){
+    document.getElementById('ga-log').textContent='No tickers. Run Scanner (MR mode) or Value Scan (DCF mode) first, or pick a watchlist.';
+    return;
+  }
+  drawFitChart([]);
+  document.getElementById('ga-prog').classList.add('show');
+  document.getElementById('ml-btn').disabled=true;
+  document.getElementById('ml-btn').textContent='Running...';
+  document.getElementById('ml-stop').style.display='inline-block';
+  document.getElementById('apply-btn').style.display='none';
+  document.getElementById('top10-wrap').style.display='none';
+  document.getElementById('best-params').style.display='none';
+  document.getElementById('ml-result-stats').style.display='none';
+  document.getElementById('ga-log').textContent='Starting '+mlMode.toUpperCase()+' optimizer on '+tickers.length+' tickers...\n';
+  var gp={
+    popSize:parseInt(document.getElementById('ga-pop').value),
+    nGen:parseInt(document.getElementById('ga-gen').value),
+    mutRate:parseInt(document.getElementById('ga-mut').value)/100,
+    eliteK:0.2,
+    fw:parseInt(document.getElementById('ga-fw').value),
+    fr:parseInt(document.getElementById('ga-fr').value)
+  };
+  var endpoint=mlMode==='dcf'?'/api/ga_dcf_start':'/api/ga_start';
+  try{
+    var r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tickers:tickers,gaParams:gp})});
+    var d=await r.json();
+    if(!d.ok){document.getElementById('ga-log').textContent=d.error;resetMLBtn();return;}
+    gaPolling=true;
+    gaTimer=setInterval(pollGA,1500);
+  }catch(e){
+    document.getElementById('ga-log').textContent='Error: '+e.message;
+    resetMLBtn();
+  }
+}
+
+async function pollGA(){
+  try{
+    var d=await(await fetch('/api/ga_status')).json();
+    document.getElementById('ga-bar').style.width=d.pct+'%';
+    document.getElementById('ga-pct').textContent=d.pct+'%';
+    if(d.log) document.getElementById('ga-log').textContent=d.log.join('\n');
+    document.getElementById('ga-log').scrollTop=99999;
+    if(d.history&&d.history.length) drawFitChart(d.history);
+    if(d.best){bestChr=d.best;renderBest(d.best);}
+    if(d.top10&&d.top10.length) renderTop10(d.top10);
+    if(!d.running){
+      clearInterval(gaTimer); gaPolling=false;
+      document.getElementById('ga-stat').textContent='Complete ✓';
+      resetMLBtn();
+      if(d.best) document.getElementById('apply-btn').style.display='inline-block';
+      if(d.top10&&d.top10.length) document.getElementById('top10-wrap').style.display='block';
+    }
+  }catch(e){}
+}
+
+function renderBest(b){
+  var p=b.params; var bt=b.bt;
+  var el=document.getElementById('best-params');
+  el.style.display='grid';
+  var h='';
+  if(p.gNear!=null){
+    h+='<div class="bp"><div class="bp-l">Near growth</div><div class="bp-v">'+sp(p.gNear*100,1)+'%</div></div>';
+    h+='<div class="bp"><div class="bp-l">Far growth</div><div class="bp-v">'+sp(p.gFar*100,1)+'%</div></div>';
+    h+='<div class="bp"><div class="bp-l">Terminal g</div><div class="bp-v">'+sp(p.gTerm*100,1)+'%</div></div>';
+    h+='<div class="bp"><div class="bp-l">WACC</div><div class="bp-v">'+sp(p.wacc*100,1)+'%</div></div>';
+    h+='<div class="bp"><div class="bp-l">Near years</div><div class="bp-v">'+p.nNear+'</div></div>';
+    h+='<div class="bp"><div class="bp-l">Far years</div><div class="bp-v">'+p.nFar+'</div></div>';
+    h+='<div class="bp"><div class="bp-l">MoS threshold</div><div class="bp-v">'+p.marginThreshold+'%</div></div>';
+    h+='<div class="bp"><div class="bp-l">Near σ</div><div class="bp-v">'+sp(p.gNearSigma*100,1)+'%</div></div>';
+  } else {
+    h+='<div class="bp"><div class="bp-l">RSI Period</div><div class="bp-v">'+p.rsiP+'</div></div>';
+    h+='<div class="bp"><div class="bp-l">BB Std Dev</div><div class="bp-v">'+p.bbStd+'</div></div>';
+    h+='<div class="bp"><div class="bp-l">Z-Window</div><div class="bp-v">'+p.zWin+'</div></div>';
+    h+='<div class="bp"><div class="bp-l">Oversold</div><div class="bp-v">'+p.rsiOS+'</div></div>';
+    h+='<div class="bp"><div class="bp-l">Overbought</div><div class="bp-v">'+p.rsiOB+'</div></div>';
+    h+='<div class="bp"><div class="bp-l">Min volume</div><div class="bp-v">'+p.volMin+'×</div></div>';
+  }
+  el.innerHTML=h;
+  var rs=document.getElementById('ml-result-stats');
+  rs.style.display='block';
+  var sh='<div class="j-stats" style="margin-top:0">';
+  sh+='<div class="j-stat"><div class="j-stat-l">Win rate</div><div class="j-stat-v" style="color:var(--gr)">'+bt.winRate+'%</div></div>';
+  sh+='<div class="j-stat"><div class="j-stat-l">Avg return</div><div class="j-stat-v" style="color:'+(bt.avgReturn>0?'var(--gr)':'var(--rd)')+'">'+(bt.avgReturn>0?'+':'')+sp(bt.avgReturn)+'%</div></div>';
+  if(bt.spearman!=null){
+    sh+='<div class="j-stat"><div class="j-stat-l">Spearman (MoS→ret)</div><div class="j-stat-v" style="color:var(--pu)">'+sp(bt.spearman,2)+'</div></div>';
+    sh+='<div class="j-stat"><div class="j-stat-l">Snapshots</div><div class="j-stat-v">'+bt.trades+'</div></div>';
+  } else {
+    sh+='<div class="j-stat"><div class="j-stat-l">Sharpe</div><div class="j-stat-v" style="color:var(--pu)">'+sp(bt.sharpe||0)+'</div></div>';
+    sh+='<div class="j-stat"><div class="j-stat-l">Max drawdown</div><div class="j-stat-v" style="color:var(--am)">'+sp(bt.maxDD||0)+'%</div></div>';
+  }
+  sh+='</div>';
+  rs.innerHTML=sh;
+}
+
+function renderTop10(top10){
+  var isDCF=top10[0]&&top10[0].params&&top10[0].params.gNear!=null;
+  var thead=document.querySelector('#t10 thead');
+  if(isDCF){
+    thead.innerHTML='<tr><th>#</th><th>g_near%</th><th>g_far%</th><th>gT%</th><th>WACC%</th><th>nNear</th><th>nFar</th><th>MoS≥</th><th>Win%</th><th>Return%</th><th>Spearman</th><th>Snaps</th><th>Fitness</th><th></th></tr>';
+  } else {
+    thead.innerHTML='<tr><th>#</th><th>RSI</th><th>BB</th><th>Z-Win</th><th>OS Level</th><th>OB Level</th><th>Volume≥</th><th>Win%</th><th>Return%</th><th>Sharpe</th><th>Max Loss%</th><th>Fitness</th><th></th></tr>';
+  }
+  var h='';
+  top10.forEach(function(c,i){
+    var p=c.params; var bt=c.bt;
+    var wc=bt.winRate>=65?'color:var(--gr)':'color:var(--am)';
+    var arc=bt.avgReturn>0?'color:var(--gr)':'color:var(--rd)';
+    h+='<tr>';
+    h+='<td style="color:var(--am)">#'+(i+1)+'</td>';
+    if(isDCF){
+      h+='<td>'+sp(p.gNear*100,1)+'</td><td>'+sp(p.gFar*100,1)+'</td><td>'+sp(p.gTerm*100,1)+'</td>';
+      h+='<td>'+sp(p.wacc*100,1)+'</td><td>'+p.nNear+'</td><td>'+p.nFar+'</td><td>'+p.marginThreshold+'</td>';
+      h+='<td style="'+wc+'">'+bt.winRate+'%</td>';
+      h+='<td style="'+arc+'">'+(bt.avgReturn>0?'+':'')+sp(bt.avgReturn)+'%</td>';
+      var spc=(bt.spearman||0)>0.2?'color:var(--gr)':'color:var(--am)';
+      h+='<td style="'+spc+'">'+sp(bt.spearman||0,2)+'</td>';
+      h+='<td>'+(bt.trades||0)+'</td>';
+      h+='<td style="color:var(--pu)">'+c.fit+'</td>';
+    } else {
+      var shc=(bt.sharpe||0)>=1?'color:var(--gr)':'color:var(--am)';
+      var ddc=(bt.maxDD||0)>25?'color:var(--rd)':'color:var(--gr)';
+      h+='<td>'+p.rsiP+'</td><td>'+p.bbStd+'</td><td>'+p.zWin+'</td>';
+      h+='<td>'+p.rsiOS+'</td><td>'+p.rsiOB+'</td><td>'+p.volMin+'</td>';
+      h+='<td style="'+wc+'">'+bt.winRate+'%</td>';
+      h+='<td style="'+arc+'">'+(bt.avgReturn>0?'+':'')+sp(bt.avgReturn)+'%</td>';
+      h+='<td style="'+shc+'">'+sp(bt.sharpe||0)+'</td>';
+      h+='<td style="'+ddc+'">'+sp(bt.maxDD||0)+'%</td>';
+      h+='<td style="color:var(--pu)">'+c.fit+'</td>';
+    }
+    h+='<td><button class="btn btn-blue btn-sm" onclick="applyParams('+JSON.stringify(p).replace(/"/g,'&quot;')+')">Use</button></td>';
+    h+='</tr>';
+  });
+  document.getElementById('t10b').innerHTML=h;
+}
+
+function applyParams(p){
+  if(p.gNear!=null){
+    go('dcf',document.querySelectorAll('.tab')[1]);
+    var b=document.getElementById('dcf-tw');
+    b.insertAdjacentHTML('afterbegin','<div class="bnr info show" style="margin:8px 0">DCF priors tuned: g_near='+sp(p.gNear*100,1)+'% WACC='+sp(p.wacc*100,1)+'% MoS threshold='+p.marginThreshold+'%. Profile saved — future Value Scans will use it automatically.</div>');
+  } else {
+    go('scanner',document.querySelectorAll('.tab')[0]);
+    showBnr('ML settings applied (RSI='+p.rsiP+', BB='+p.bbStd+', Z='+p.zWin+'). Press Scan to use them.','ok');
+  }
+}
+function applyBest(){ if(bestChr) applyParams(bestChr.params); }
+
+async function stopML(){
+  await fetch('/api/ga_stop',{method:'POST'});
+  clearInterval(gaTimer); gaPolling=false; resetMLBtn();
+}
+function resetMLBtn(){
+  document.getElementById('ml-btn').disabled=false;
+  document.getElementById('ml-btn').textContent='Run Optimizer';
+  document.getElementById('ml-stop').style.display='none';
+}
+
+// ── MONTE CARLO ───────────────────────────────────────────────────────────────
+async function runMC(){
+  var wr=parseInt(document.getElementById('mc-wr').value);
+  var rr=parseInt(document.getElementById('mc-rr').value)/10;
+  var nt=parseInt(document.getElementById('mc-nt').value);
+  var cap=parseInt(document.getElementById('mc-cap').value);
+  var risk=parseInt(document.getElementById('mc-risk').value)/10;
+  try{
+    var d=await(await fetch('/api/monte_carlo?wr='+wr+'&rr='+rr+'&nt='+nt+'&cap='+cap+'&risk='+risk)).json();
+    if(!d.ok) return;
+    var mc=d.result;
+    renderMCChart(mc.curves,cap);
+    var roi=((mc.p50-cap)/cap*100).toFixed(1);
+    var sign=mc.p50>=cap?'+':'';
+    var riskStr=risk<=2?'conservative (good)':risk<=5?'moderate':risk<=10?'aggressive':'very aggressive — dangerous';
+    var oh='';
+    oh+='<div class="mc-out"><div class="mc-out-l">Worst 5% case</div><div class="mc-out-v" style="color:var(--rd)">$'+mc.p5+'</div></div>';
+    oh+='<div class="mc-out"><div class="mc-out-l">Bad case 25%</div><div class="mc-out-v" style="color:var(--am)">$'+mc.p25+'</div></div>';
+    oh+='<div class="mc-out"><div class="mc-out-l">Most likely</div><div class="mc-out-v" style="color:var(--gr)">$'+mc.p50+'</div></div>';
+    oh+='<div class="mc-out"><div class="mc-out-l">Good case 75%</div><div class="mc-out-v" style="color:var(--gr)">$'+mc.p75+'</div></div>';
+    oh+='<div class="mc-out"><div class="mc-out-l">Best 5% case</div><div class="mc-out-v" style="color:var(--gr)">$'+mc.p95+'</div></div>';
+    oh+='<div class="mc-out"><div class="mc-out-l">Typical worst loss</div><div class="mc-out-v" style="color:var(--am)">'+mc.medMaxDD+'%</div></div>';
+    oh+='<div class="mc-out"><div class="mc-out-l">Chance of losing 50%+</div><div class="mc-out-v" style="color:'+(mc.ruinPct>15?'var(--rd)':mc.ruinPct>5?'var(--am)':'var(--gr)')+'">'+mc.ruinPct+'%</div></div>';
+    oh+='<div class="mc-out"><div class="mc-out-l">Chance of profit</div><div class="mc-out-v" style="color:'+(mc.profitPct>60?'var(--gr)':'var(--am)')+'">'+mc.profitPct+'%</div></div>';
+    document.getElementById('mc-outs').innerHTML=oh;
+    var ih='';
+    ih+='<strong>What this tells you:</strong><br><br>';
+    ih+='With a <strong>'+wr+'%</strong> win rate and <strong>'+rr+'x</strong> reward-to-risk, risking <strong>'+risk+'%</strong> per trade ('+riskStr+'):<br><br>';
+    ih+='The <strong>most likely outcome</strong> after '+nt+' trades is <strong style="color:'+(mc.p50>=cap?'var(--gr)':'var(--rd)')+'">$'+mc.p50+' ('+sign+roi+'%)</strong>.<br><br>';
+    ih+='You have a <strong>'+mc.profitPct+'%</strong> chance of ending in profit, and a <strong>'+mc.ruinPct+'%</strong> chance of losing more than half your money.<br><br>';
+    ih+='Even in a typical run, expect to see a <strong>'+mc.medMaxDD+'%</strong> drawdown at some point before recovery. <strong>Can you stay disciplined through that?</strong>';
+    if(mc.ruinPct>15) ih+='<br><br><span style="color:var(--rd)">⚠ HIGH RISK — reduce position size or improve win rate before trading this size.</span>';
+    if(mc.ruinPct<=5&&mc.profitPct>65) ih+='<br><br><span style="color:var(--gr)">✓ Good setup — the math is in your favor.</span>';
+    document.getElementById('mc-interp').innerHTML=ih;
+  }catch(e){}
+}
+
+function renderMCChart(curves,cap){
+  var cv=document.getElementById('mc-cv');
+  if(mcChart){mcChart.destroy();mcChart=null;}
+  if(!curves||!curves.length) return;
+  var maxLen=Math.max.apply(null,curves.map(function(c){return c.length;}));
+  var labels=Array.from({length:maxLen},function(_,i){return i;});
+  var ds=curves.map(function(c){
+    return {data:c,borderColor:'rgba(0,232,150,.07)',borderWidth:1,pointRadius:0,fill:false,tension:.3};
+  });
+  ds.push({data:Array(maxLen).fill(cap),borderColor:'rgba(255,51,85,.4)',borderWidth:1,
+           borderDash:[4,4],pointRadius:0,fill:false});
+  mcChart=new Chart(cv,{
+    type:'line',data:{labels:labels,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},
+      plugins:{legend:{display:false}},
+      scales:{x:{display:false},y:{grid:{color:'rgba(26,37,53,.6)'},
+        ticks:{color:'#2c4258',font:{size:9},callback:function(v){return '$'+Math.round(v);}}}}}
+  });
+}
+
+// ── PAIRS / CORRELATION ────────────────────────────────────────────────────────
+async function loadCorr(){
+  var tickers=allR.length?allR.map(function(r){return r.ticker;}):getTickers();
+  if(tickers.length<2){
+    document.getElementById('corr-bnr').textContent='Need at least 2 stocks. Run Scanner first, then click Compute Pairs.';
+    document.getElementById('corr-bnr').className='bnr warn show';
+    return;
+  }
+  document.getElementById('corr-bnr').textContent='Computing from cached data...';
+  document.getElementById('corr-bnr').className='bnr info show';
+  try{
+    var d=await(await fetch('/api/correlation?tickers='+tickers.join(','))).json();
+    document.getElementById('corr-bnr').className='bnr';
+    renderCorr(d.matrix||{},d.pairs||[],d.spreads||[]);
+  }catch(e){
+    document.getElementById('corr-bnr').textContent='Error: '+e.message+'. Run Scanner first.';
+    document.getElementById('corr-bnr').className='bnr err show';
+  }
+}
+
+function renderCorr(matrix,pairs,spreads){
+  var tickers=Object.keys(matrix);
+  var h='';
+  if(spreads&&spreads.length){
+    h+='<div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:6px">Pairs Trading Signals <span style="font-size:10px;color:var(--gr);font-weight:400">· cointegrated only</span></div>';
+    h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:10px">Only pairs whose spread passes the Engle-Granger cointegration test (ADF &lt; −2.86) are shown. Correlation alone is not enough — two stocks can be highly correlated and still drift apart forever.</div>';
+    h+='<div class="spread-cards">';
+    spreads.forEach(function(s){
+      var zc=Math.abs(s.z)>2?'var(--gr)':'var(--am)';
+      var wc=s.winRate>=65?'var(--gr)':s.winRate>=55?'var(--am)':'var(--rd)';
+      h+='<div class="spread-card">';
+      h+='<div class="spread-tk">'+esc(s.t1)+' vs '+esc(s.t2)+' <span style="font-size:10px;color:var(--gr);margin-left:4px">● Cointegrated</span></div>';
+      h+='<div class="spread-z" style="color:'+zc+'">'+s.z+'σ from normal</div>';
+      h+='<div class="spread-dir">'+esc(s.direction)+'</div>';
+      h+='<div style="color:'+wc+';font-size:11px;margin-bottom:4px">Win rate: '+s.winRate+'% ('+s.tests+' historical tests)</div>';
+      h+='<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">ADF: '+s.cointAdf+' · hedge ratio β='+s.cointBeta+'</div>';
+      h+='<div class="spread-plain">'+esc(s.plain)+'</div>';
+      h+='</div>';
+    });
+    h+='</div><br>';
+  } else {
+    h+='<div style="padding:10px 12px;background:var(--bg2);border-radius:8px;border:1px solid var(--bdr);font-size:12px;color:var(--tx2);margin-bottom:12px">No active pairs signals right now. Either no pair passed the cointegration test (ADF &lt; −2.86 on residuals), or no cointegrated spread is currently stretched ≥1.5σ. Check back after a market move.</div>';
+  }
+  if(pairs&&pairs.length){
+    h+='<div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:8px">Highly Correlated Stocks</div>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px">';
+    pairs.forEach(function(p){
+      var danger=Math.abs(p.corr)>=0.8;
+      var bg=danger?'rgba(255,51,85,.1)':'rgba(255,170,34,.08)';
+      var bc=danger?'rgba(255,51,85,.25)':'rgba(255,170,34,.2)';
+      var fc=danger?'var(--rd)':'var(--am)';
+      var note=danger?'⚠ Almost identical movement — holding both is the same bet twice':'They move similarly — consider sizing down if holding both';
+      var cointTag=p.cointegrated?' <span style="color:var(--gr);font-size:10px;margin-left:4px">● Cointegrated (tradable as pair)</span>':' <span style="color:var(--tx3);font-size:10px;margin-left:4px">— not cointegrated (drift risk)</span>';
+      h+='<div style="background:'+bg+';border:1px solid '+bc+';border-radius:8px;padding:8px 12px;font-size:12px">';
+      h+='<span style="color:'+fc+';font-weight:600">'+esc(p.t1)+' and '+esc(p.t2)+'</span>';
+      h+='<span style="color:var(--tx2);margin-left:6px">r='+p.corr+'</span>'+cointTag;
+      h+='<div style="font-size:11px;color:var(--tx3);margin-top:3px">'+note+(p.cointAdf!=null?' · ADF='+p.cointAdf:'')+'</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+  if(tickers.length){
+    h+='<div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:6px">Full Correlation Matrix</div>';
+    h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">How much each pair moves together (log returns). Red = almost identical. Teal = they move opposite.</div>';
+    h+='<div style="overflow-x:auto"><table><thead><tr><th></th>';
+    tickers.forEach(function(t){h+='<th>'+esc(t)+'</th>';});
+    h+='</tr></thead><tbody>';
+    tickers.forEach(function(t1){
+      h+='<tr><td style="font-weight:600;font-size:11px">'+esc(t1)+'</td>';
+      tickers.forEach(function(t2){
+        var v=matrix[t1]&&matrix[t1][t2]!=null?matrix[t1][t2]:0;
+        var bg=v>0.8?'rgba(255,51,85,.18)':v>0.65?'rgba(255,170,34,.12)':v>0.3?'rgba(255,170,34,.05)':v<-0.5?'rgba(0,221,232,.12)':'transparent';
+        var fc=v>0.7?'var(--rd)':v>0.5?'var(--am)':v<-0.4?'var(--cy)':'var(--tx2)';
+        h+='<td class="corr-cell" style="background:'+bg+';color:'+fc+'">'+(t1===t2?'—':v.toFixed(2))+'</td>';
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+  }
+  document.getElementById('corr-body').innerHTML=h||'<div class="empty"><div class="empty-icon">◉</div><div class="empty-t">No data</div></div>';
+}
+
+// ── JOURNAL ────────────────────────────────────────────────────────────────────
+async function loadJournal(){
+  try{
+    var d=await(await fetch('/api/journal')).json();
+    renderJournal(d.trades||[]);
+  }catch(e){
+    document.getElementById('j-tw').innerHTML='<div class="empty"><div class="empty-t">Could not load journal. Is server.py running?</div></div>';
+  }
+}
+
+function renderJournal(trades){
+  var open=trades.filter(function(t){return t.status==='open';});
+  var closed=trades.filter(function(t){return t.status==='closed';});
+  var totalPnl=closed.reduce(function(a,b){return a+(b.pnl||0);},0);
+  var wins=closed.filter(function(t){return (t.pnlPct||0)>0;}).length;
+  var realWR=closed.length?Math.round(wins/closed.length*100):0;
+  var predWR=closed.length?Math.round(closed.reduce(function(a,b){return a+(parseFloat(b.winPct)||0);},0)/closed.length):0;
+  var weeklyPnl=closed.filter(function(t){
+    try{return (new Date()-new Date(t.closeDate))<7*86400*1000;}catch(e){return false;}
+  }).reduce(function(a,b){return a+(b.pnl||0);},0);
+  var warn=document.getElementById('j-warn');
+  var weeklyLoss=weeklyPnl<0?Math.abs(weeklyPnl/1000*100):0;
+  if(weeklyLoss>8){
+    warn.textContent='⚠ STOP TRADING THIS WEEK. You are down '+weeklyLoss.toFixed(1)+'% this week (exceeded 8% weekly limit). Wait until Monday. Trading emotionally after losses is the #1 way small accounts blow up.';
+    warn.classList.add('show');
+  } else if(open.length>=4){
+    warn.textContent='⚠ You have '+open.length+' trades open. With $1,000 capital, more than 3 concurrent trades means either each position is too small to matter, or you are over-concentrated. Consider closing one before opening another.';
+    warn.classList.add('show');
+  } else {
+    warn.classList.remove('show');
+  }
+  var edgeStatus='Need 5+ closed trades';
+  var edgeColor='var(--tx2)';
+  if(closed.length>=5){
+    if(realWR>=predWR){edgeStatus='YES ✓';edgeColor='var(--gr)';}
+    else if(realWR>=predWR-10){edgeStatus='Close';edgeColor='var(--am)';}
+    else{edgeStatus='Re-optimize';edgeColor='var(--rd)';}
+  }
+  var sh='<div class="j-stats">';
+  sh+='<div class="j-stat"><div class="j-stat-l">Open trades</div><div class="j-stat-v" style="color:var(--bl)">'+open.length+'</div></div>';
+  sh+='<div class="j-stat"><div class="j-stat-l">Closed trades</div><div class="j-stat-v">'+closed.length+'</div></div>';
+  sh+='<div class="j-stat"><div class="j-stat-l">Total P&L</div><div class="j-stat-v" style="color:'+(totalPnl>=0?'var(--gr)':'var(--rd)')+'">'+(totalPnl>=0?'+':'')+'$'+totalPnl.toFixed(2)+'</div></div>';
+  sh+='<div class="j-stat"><div class="j-stat-l">Actual win%</div><div class="j-stat-v" style="color:'+(realWR>=predWR?'var(--gr)':'var(--rd)')+'">'+realWR+'%</div></div>';
+  sh+='<div class="j-stat"><div class="j-stat-l">Predicted win%</div><div class="j-stat-v" style="color:var(--am)">'+predWR+'%</div></div>';
+  sh+='<div class="j-stat"><div class="j-stat-l">Edge verified</div><div class="j-stat-v" style="color:'+edgeColor+'">'+edgeStatus+'</div></div>';
+  sh+='</div>';
+  document.getElementById('j-stats').innerHTML=sh;
+  if(!trades.length){
+    document.getElementById('j-tw').innerHTML='<div class="empty"><div class="empty-icon">◎</div><div class="empty-t">No trades logged yet</div><div class="empty-s">Use the form above or click "Log this trade" from any scanner signal detail panel.</div></div>';
+    return;
+  }
+  var h='<table><thead><tr>';
+  h+='<th>Date</th><th>Stock</th><th>Dir</th><th>Entry</th><th>Stop</th><th>Target</th>';
+  h+='<th>Size</th><th>Pred Win%</th><th>Status</th><th>Exit $</th><th>P&L %</th><th>P&L $</th><th>Notes</th><th>Actions</th>';
+  h+='</tr></thead><tbody>';
+  trades.slice().reverse().forEach(function(t){
+    var pnlc=(t.pnlPct||0)>0?'color:var(--gr)':(t.pnlPct||0)<0?'color:var(--rd)':'color:var(--tx2)';
+    var dirc=t.direction==='LONG'?'color:var(--gr)':'color:var(--rd)';
+    h+='<tr>';
+    h+='<td style="color:var(--tx3);font-size:10px">'+(t.openDate||'')+'</td>';
+    h+='<td style="font-weight:600">'+esc(t.ticker||'')+'</td>';
+    h+='<td style="'+dirc+'">'+esc(t.direction||'')+'</td>';
+    h+='<td style="color:var(--bl)">$'+(t.entry||'—')+'</td>';
+    h+='<td style="color:var(--rd)">$'+(t.stop||'—')+'</td>';
+    h+='<td style="color:var(--gr)">$'+(t.target||'—')+'</td>';
+    h+='<td>$'+(t.size||'—')+'</td>';
+    h+='<td>'+(t.winPct||'—')+'%</td>';
+    h+='<td>'+(t.status==='open'?'<span style="color:var(--am)">Open</span>':'<span style="color:var(--tx3)">Closed</span>')+'</td>';
+    h+='<td>'+(t.exitPrice?'$'+t.exitPrice:'—')+'</td>';
+    h+='<td style="'+pnlc+'">'+(t.pnlPct!=null?(t.pnlPct>0?'+':'')+t.pnlPct+'%':'—')+'</td>';
+    h+='<td style="'+pnlc+'">'+(t.pnl!=null?(t.pnl>=0?'+':'')+'$'+t.pnl:'—')+'</td>';
+    h+='<td style="color:var(--tx3);font-size:10px">'+esc(t.notes||'')+'</td>';
+    h+='<td style="display:flex;gap:4px;align-items:center;white-space:nowrap">';
+    if(t.status==='open'){
+      h+='<input type="number" placeholder="exit $" id="ep-'+t.id+'" style="width:72px;font-size:11px;padding:4px 6px;border:1px solid var(--bdr2);background:var(--bg3);color:var(--tx);border-radius:4px;outline:none">';
+      h+='<button class="btn btn-scan btn-sm" onclick="closeT('+t.id+')">Close</button>';
+    }
+    h+='<button class="btn btn-red btn-sm" onclick="deleteT('+t.id+')">✕</button>';
+    h+='</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  document.getElementById('j-tw').innerHTML=h;
+}
+
+async function logTrade(){
+  var tk=document.getElementById('jt-tk').value.trim().toUpperCase();
+  if(!tk){alert('Please enter a ticker symbol.');return;}
+  var t={ticker:tk,direction:document.getElementById('jt-dir').value,
+    entry:document.getElementById('jt-en').value,stop:document.getElementById('jt-st').value,
+    target:document.getElementById('jt-tg').value,size:document.getElementById('jt-sz').value,
+    winPct:document.getElementById('jt-wp').value,notes:document.getElementById('jt-notes').value};
+  await fetch('/api/journal/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trade:t})});
+  ['jt-tk','jt-en','jt-st','jt-tg','jt-sz','jt-wp','jt-notes'].forEach(function(id){document.getElementById(id).value='';});
+  loadJournal();
+}
+
+async function closeT(id){
+  var ep=document.getElementById('ep-'+id);
+  if(!ep||!ep.value){alert('Enter the exit price first.');return;}
+  await fetch('/api/journal/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,exitPrice:ep.value})});
+  loadJournal();
+}
+
+async function deleteT(id){
+  if(!confirm('Delete this trade?')) return;
+  await fetch('/api/journal/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});
+  loadJournal();
+}
+</script>
+</body>
+</html>
